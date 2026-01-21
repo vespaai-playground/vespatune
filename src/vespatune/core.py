@@ -104,15 +104,18 @@ class VespaTune:
             df[self.idx] = np.arange(len(df))
         return df
 
-    def _process_data(self):
+    def _process_data(self, check_stop=None):
+        if check_stop: check_stop()
         logger.info("Reading training data")
         train_df = pd.read_csv(self.train_filename)
         train_df = reduce_memory_usage(train_df)
 
+        if check_stop: check_stop()
         logger.info("Reading validation data")
         valid_df = pd.read_csv(self.valid_filename)
         valid_df = reduce_memory_usage(valid_df)
 
+        if check_stop: check_stop()
         problem_type = self._determine_problem_type(train_df)
 
         train_df = self._inject_idx(train_df)
@@ -156,6 +159,8 @@ class VespaTune:
             categorical_features = self.categorical_features
 
         logger.info(f"Found {len(categorical_features)} categorical features.")
+        
+        if check_stop: check_stop()
 
         # encode categorical features
         if len(categorical_features) > 0:
@@ -177,6 +182,7 @@ class VespaTune:
             categorical_encoder = None
 
         # save processed data
+        if check_stop: check_stop()
         train_df.to_feather(os.path.join(self.output, "train.feather"))
         valid_df.to_feather(os.path.join(self.output, "valid.feather"))
         if self.test_filename is not None:
@@ -210,8 +216,8 @@ class VespaTune:
         joblib.dump(categorical_encoder, f"{self.output}/vtune.categorical_encoder")
         joblib.dump(target_encoder, f"{self.output}/vtune.target_encoder")
 
-    def train(self, callbacks=None):
-        self._process_data()
+    def train(self, callbacks=None, check_stop=None):
+        self._process_data(check_stop=check_stop)
         best_params = train_model(self.model_config, callbacks=callbacks)
         logger.info("Hyperparameter tuning complete")
 

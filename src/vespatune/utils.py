@@ -161,6 +161,11 @@ def optimize(trial, model_config):
 
     metric_dict = metrics.calculate(yvalid, ypred)
     logger.info(f"Metrics: {metric_dict}")
+
+    # Log all metrics to trial user_attrs for UI visualization
+    for metric, value in metric_dict.items():
+        trial.set_user_attr(metric, value)
+
     return metric_dict[eval_metric]
 
 

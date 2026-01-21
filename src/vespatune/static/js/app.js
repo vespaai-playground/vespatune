@@ -4,6 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let trials = [];
     let bestValue = null;
     let columns = [];
+    let chart = null;
+    let currentMetric = 'value';
+    let availableMetrics = new Set(['value']);
+    let isTraining = false;
 
     // --- DOM Elements ---
     const form = document.getElementById('train-form');
@@ -22,6 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const idSelect = document.getElementById('id_column');
     const loadStudyBtn = document.getElementById('load-study-btn');
     const dbPathInput = document.getElementById('db_path');
+    const stopBtn = document.getElementById('stop-btn');
+    const startBtn = document.getElementById('start-btn');
+    const metricSelect = document.getElementById('metric-select');
+
+    // Modal Elements
+    const modal = document.getElementById('trial-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMetrics = document.getElementById('modal-metrics');
+    const modalParams = document.getElementById('modal-params');
+    const closeModal = document.querySelector('.close-modal');
 
     // --- File Uploads with Column Detection ---
     function setupUpload(boxId, inputId, hiddenId, statusId, isTrainFile) {
@@ -55,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     columns = data.columns;
                     populateColumnDropdowns(columns);
                 }
+                saveConfig(); // Save state after upload
             } catch (e) {
                 status.textContent = 'Upload failed';
                 console.error(e);
@@ -93,17 +108,155 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUpload('train-upload', 'train_file', 'train_filename', 'train_file_info', true);
     setupUpload('valid-upload', 'valid_file', 'valid_filename', 'valid_file_info', false);
 
+    // --- Configuration Persistence ---
+    function saveConfig() {
+        const config = {
+            train_filename: document.getElementById('train_filename').value,
+            valid_filename: document.getElementById('valid_filename').value,
+            train_file_info: document.getElementById('train_file_info').textContent,
+            valid_file_info: document.getElementById('valid_file_info').textContent,
+            target_columns: Array.from(targetSelect.selectedOptions).map(o => o.value),
+            id_column: idSelect.value,
+        };
+
+        // Save other inputs
+        const inputs = form.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            if (input.type !== 'file' && input.type !== 'hidden' && input.id) {
+                config[input.id] = input.value;
+            }
+        });
+
+        localStorage.setItem('vespatune_config', JSON.stringify(config));
+    }
+
+    async function loadConfig() {
+        const configStr = localStorage.getItem('vespatune_config');
+        if (!configStr) return;
+
+        try {
+            const config = JSON.parse(configStr);
+
+            // Restore file paths
+            if (config.train_filename) {
+                document.getElementById('train_filename').value = config.train_filename;
+                const info = document.getElementById('train_file_info');
+                info.textContent = config.train_file_info || config.train_filename;
+                if (config.train_filename) document.getElementById('train-upload').classList.add('uploaded');
+
+                // Fetch valid columns for this file
+                await fetchAndPopulateColumns(config.train_filename);
+            }
+
+            if (config.valid_filename) {
+                document.getElementById('valid_filename').value = config.valid_filename;
+                const info = document.getElementById('valid_file_info');
+                info.textContent = config.valid_file_info || config.valid_filename;
+                if (config.valid_filename) document.getElementById('valid-upload').classList.add('uploaded');
+            }
+
+            // Restore other inputs
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (input.type !== 'file' && input.type !== 'hidden' && input.id && config[input.id] !== undefined) {
+                    // Skip special selects for now
+                    if (input.id !== 'target_columns' && input.id !== 'id_column') {
+                        input.value = config[input.id];
+                    }
+                }
+            });
+
+            // Restore Dropdowns (after columns populated)
+            if (config.target_columns && Array.isArray(config.target_columns)) {
+                Array.from(targetSelect.options).forEach(opt => {
+                    opt.selected = config.target_columns.includes(opt.value);
+                });
+            }
+            if (config.id_column) {
+                idSelect.value = config.id_column;
+            }
+
+        } catch (e) {
+            console.error('Error loading config', e);
+        }
+    }
+
+    async function fetchAndPopulateColumns(path) {
+        try {
+            const resp = await fetch(`/columns?path=${encodeURIComponent(path)}`);
+            const data = await resp.json();
+            if (data.columns) {
+                columns = data.columns;
+                populateColumnDropdowns(columns);
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    // Attach listeners
+    form.addEventListener('change', saveConfig);
+    // Also save after successful upload (hooked below)
+
+    // --- Chart.js Setup ---
+    function initChart() {
+        const ctx = document.getElementById('optimization-chart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Metric Value',
+                    data: [],
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: '#1e293b',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#94a3b8',
+                        borderColor: '#334155',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+    }
+
     // --- WebSocket & Training ---
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        if (isTraining) return;
+
         // Reset state
-        trials = [];
-        bestValue = null;
-        updateMetrics();
-        clearTrialList();
-        clearLogs();
-        clearChart();
+        resetState();
 
         // Get selected targets
         const selectedTargets = Array.from(targetSelect.selectedOptions).map(o => o.value);
@@ -112,15 +265,31 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Connect WebSocket
+        connectWebSocket();
+        startTraining(selectedTargets);
+    });
+
+    stopBtn.addEventListener('click', async () => {
+        if (!isTraining) return;
+        try {
+            await fetch('/stop', { method: 'POST' });
+            appendLog('Stopping training...', 'warning');
+            stopBtn.disabled = true;
+            stopBtn.textContent = 'Stopping...';
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    function connectWebSocket() {
+        if (ws && ws.readyState === WebSocket.OPEN) return;
+
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
         ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
         ws.onopen = () => {
             connectionStatus.textContent = 'Connected';
             connectionStatus.classList.add('connected');
-            setStatus('Starting...', 'running');
-            startTraining(selectedTargets);
         };
 
         ws.onmessage = (event) => {
@@ -137,14 +306,14 @@ document.addEventListener('DOMContentLoaded', () => {
             appendLog('WebSocket error', 'error');
             console.error(e);
         };
-    });
+    }
 
     async function startTraining(selectedTargets) {
         const formData = new FormData(form);
         const data = {};
 
         for (const [key, value] of formData.entries()) {
-            if (key === 'target_columns') continue; // Handle separately
+            if (key === 'target_columns') continue;
             const input = document.getElementById(key);
             if (input && input.type === 'number') {
                 data[key] = parseFloat(value);
@@ -153,7 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Join targets with semicolon
         data.target_columns = selectedTargets.join(';');
 
         try {
@@ -166,6 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!resp.ok) {
                 appendLog(`Error: ${result.detail || JSON.stringify(result)}`, 'error');
                 setStatus('Error', 'error');
+            } else {
+                setTrainingState(true);
             }
         } catch (e) {
             appendLog(`Error: ${e}`, 'error');
@@ -182,77 +352,200 @@ document.addEventListener('DOMContentLoaded', () => {
 
             case 'trial_complete':
                 addTrial(data);
-                updateMetrics();
-                updateChart();
-                if (data.best_params) {
-                    bestParams.textContent = JSON.stringify(data.best_params, null, 2);
-                }
                 break;
 
             case 'training_finished':
                 setStatus('Completed', 'completed');
                 appendLog('Training completed successfully!', 'info');
-                loadStudyFromOutput();
+                setTrainingState(false);
+                break;
+
+            case 'info':
+                appendLog(data.message, 'info');
                 break;
 
             case 'error':
                 setStatus('Error', 'error');
                 appendLog(`Error: ${data.message}`, 'error');
+                setTrainingState(false);
                 break;
         }
     }
 
+    function setTrainingState(active) {
+        isTraining = active;
+        if (active) {
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            stopBtn.disabled = false;
+            stopBtn.textContent = 'Stop';
+        } else {
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+        }
+    }
+
+    function resetState() {
+        trials = [];
+        bestValue = null;
+        availableMetrics = new Set(['value']);
+        updateMetricDropdown();
+        clearTrialList();
+        clearLogs();
+
+        if (chart) {
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update();
+        } else {
+            initChart(); // Ensure chart is initialized
+        }
+
+        chartPlaceholder.style.display = 'flex';
+        document.getElementById('optimization-chart').style.display = 'none';
+
+        trialCount.textContent = '0';
+        bestScore.textContent = '--';
+        latestScore.textContent = '--';
+        historyCount.textContent = '0';
+        bestParams.textContent = 'No results yet';
+    }
+
+    // --- Metric Selection ---
+    metricSelect.addEventListener('change', () => {
+        currentMetric = metricSelect.value;
+        updateChart();
+    });
+
+    function updateMetricDropdown() {
+        // Keep current selection if valid
+        const current = metricSelect.value;
+        metricSelect.innerHTML = '<option value="value">Objective Value</option>';
+
+        availableMetrics.forEach(m => {
+            if (m === 'value') return;
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            metricSelect.appendChild(opt);
+        });
+
+        if (availableMetrics.has(current)) {
+            metricSelect.value = current;
+        }
+    }
+
     function addTrial(data) {
-        trials.push({
+        // Store all metrics
+        const trialData = {
             number: data.number,
             value: data.value,
             params: data.params,
+            metrics: data.user_attrs || {},
             time: new Date()
-        });
+        };
 
-        if (bestValue === null || data.value < bestValue) {
-            bestValue = data.value;
+        // Add user_attrs keys to available metrics
+        if (data.user_attrs) {
+            Object.keys(data.user_attrs).forEach(k => availableMetrics.add(k));
+            updateMetricDropdown();
         }
 
-        // Update trial list
-        const isBest = data.value === bestValue;
+        trials.push(trialData);
+        trials.sort((a, b) => a.number - b.number);
+
+        // Update Global Best
+        if (bestValue === null || data.value < bestValue) {
+            bestValue = data.value;
+            bestParams.textContent = JSON.stringify(data.best_params, null, 2);
+            bestScore.textContent = bestValue.toFixed(6);
+        }
+
+        latestScore.textContent = data.value.toFixed(6);
+        trialCount.textContent = trials.length;
+        historyCount.textContent = trials.length;
+
+        // UI Updates
+        updateChart();
+        addTrialToList(trialData, data.value === bestValue);
+    }
+
+    function updateChart() {
+        if (!chart) initChart();
+
+        chartPlaceholder.style.display = 'none';
+        const canvas = document.getElementById('optimization-chart');
+        canvas.style.display = 'block';
+
+        chart.data.labels = trials.map(t => `#${t.number}`);
+
+        // Map data based on selected metric
+        const dataPoints = trials.map(t => {
+            if (currentMetric === 'value') return t.value;
+            return t.metrics?.[currentMetric] ?? null;
+        });
+
+        chart.data.datasets[0].data = dataPoints;
+        chart.data.datasets[0].label = currentMetric;
+        chart.update();
+    }
+
+    function addTrialToList(t, isBest) {
+        // Remove placeholder
+        const placeholder = trialList.querySelector('.trial-placeholder');
+        if (placeholder) placeholder.remove();
+
         const div = document.createElement('div');
         div.className = `trial-item${isBest ? ' best' : ''}`;
         div.innerHTML = `
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span class="trial-number">#${data.number}</span>
-                <span class="trial-time">${new Date().toLocaleTimeString()}</span>
+                <span class="trial-number">#${t.number}</span>
+                <span class="trial-params">${Object.keys(t.params).length} params</span>
             </div>
-            <span class="trial-value">${data.value?.toFixed(6)}</span>
+            <span class="trial-value">${t.value?.toFixed(6)}</span>
         `;
 
-        // Remove placeholder if exists
-        const placeholder = trialList.querySelector('.trial-placeholder');
-        if (placeholder) placeholder.remove();
+        div.addEventListener('click', () => openModal(t));
 
+        // Prepend to list
         trialList.prepend(div);
 
-        // Update best markers
+        // Update other best markers
         if (isBest) {
-            trialList.querySelectorAll('.trial-item').forEach(item => {
-                if (item !== div) item.classList.remove('best');
+            Array.from(trialList.children).forEach(child => {
+                if (child !== div) child.classList.remove('best');
             });
         }
     }
 
-    function updateMetrics() {
-        trialCount.textContent = trials.length;
-        historyCount.textContent = trials.length;
+    // --- Modal Handling ---
+    function openModal(trial) {
+        modalTitle.textContent = `Trial #${trial.number}`;
+        modalParams.textContent = JSON.stringify(trial.params, null, 2);
 
-        if (bestValue !== null) {
-            bestScore.textContent = bestValue.toFixed(6);
+        // Format metrics
+        let metricsText = `Objective Value: ${trial.value}\n`;
+        if (trial.metrics) {
+            Object.entries(trial.metrics).forEach(([k, v]) => {
+                metricsText += `${k}: ${v}\n`;
+            });
         }
+        modalMetrics.textContent = metricsText;
 
-        if (trials.length > 0) {
-            latestScore.textContent = trials[trials.length - 1].value.toFixed(6);
-        }
+        modal.style.display = 'flex';
     }
 
+    closeModal.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+        }
+    };
+
+    // --- Utility ---
     function setStatus(message, type) {
         statusText.textContent = message;
         statusText.className = `status-text ${type}`;
@@ -271,115 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearLogs() {
-        logsDiv.innerHTML = '<div class="log-line info">Starting training...</div>';
-    }
-
-    // --- Simple Chart (ASCII-style visualization) ---
-    let chartData = [];
-
-    function clearChart() {
-        chartData = [];
-        chartPlaceholder.style.display = 'flex';
-        chartPlaceholder.textContent = 'Run training to see optimization progress';
-    }
-
-    function updateChart() {
-        if (trials.length === 0) return;
-
-        chartPlaceholder.style.display = 'none';
-        chartData = trials.map(t => t.value);
-
-        const canvas = document.getElementById('optimization-chart');
-        const ctx = canvas.getContext('2d');
-
-        // Set canvas size
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-
-        // Draw chart
-        drawChart(ctx, canvas.width, canvas.height);
-    }
-
-    function drawChart(ctx, width, height) {
-        const padding = { top: 20, right: 20, bottom: 30, left: 50 };
-        const chartWidth = width - padding.left - padding.right;
-        const chartHeight = height - padding.top - padding.bottom;
-
-        // Clear
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, width, height);
-
-        if (chartData.length === 0) return;
-
-        const minVal = Math.min(...chartData);
-        const maxVal = Math.max(...chartData);
-        const range = maxVal - minVal || 1;
-
-        // Draw grid lines
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i++) {
-            const y = padding.top + (chartHeight * i / 4);
-            ctx.beginPath();
-            ctx.moveTo(padding.left, y);
-            ctx.lineTo(width - padding.right, y);
-            ctx.stroke();
-        }
-
-        // Draw axis labels
-        ctx.fillStyle = '#64748b';
-        ctx.font = '10px Inter, sans-serif';
-        ctx.textAlign = 'right';
-        for (let i = 0; i <= 4; i++) {
-            const val = maxVal - (range * i / 4);
-            const y = padding.top + (chartHeight * i / 4);
-            ctx.fillText(val.toFixed(4), padding.left - 5, y + 3);
-        }
-
-        // Draw line
-        ctx.strokeStyle = '#6366f1';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        chartData.forEach((val, i) => {
-            const x = padding.left + (chartWidth * i / Math.max(chartData.length - 1, 1));
-            const y = padding.top + chartHeight - (chartHeight * (val - minVal) / range);
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        });
-        ctx.stroke();
-
-        // Draw best line
-        const bestY = padding.top + chartHeight - (chartHeight * (minVal - minVal) / range);
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(padding.left, bestY);
-        ctx.lineTo(width - padding.right, bestY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Draw points
-        ctx.fillStyle = '#6366f1';
-        chartData.forEach((val, i) => {
-            const x = padding.left + (chartWidth * i / Math.max(chartData.length - 1, 1));
-            const y = padding.top + chartHeight - (chartHeight * (val - minVal) / range);
-
-            ctx.beginPath();
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
-        // X-axis label
-        ctx.fillStyle = '#64748b';
-        ctx.textAlign = 'center';
-        ctx.fillText('Trial', width / 2, height - 5);
+        logsDiv.innerHTML = '<div class="log-line info">Waiting for training...</div>';
     }
 
     // --- Load Past Study ---
@@ -391,7 +576,10 @@ document.addEventListener('DOMContentLoaded', () => {
             appendLog('Please enter a database path', 'error');
             return;
         }
+        await fetchAndDisplayStudy(dbPath);
+    }
 
+    async function fetchAndDisplayStudy(dbPath) {
         try {
             const resp = await fetch(`/study/vespatune?db_path=${encodeURIComponent(dbPath)}`);
             const data = await resp.json();
@@ -401,7 +589,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            displayStudyResults(data);
+            resetState();
+
+            // Add all trials
+            data.trials.forEach(t => {
+                const trialObj = {
+                    number: t.number,
+                    value: t.value,
+                    params: t.params,
+                    user_attrs: t.user_attrs,
+                    best_params: data.best_params // This is global best, but effectively same for parsing
+                };
+                addTrial(trialObj);
+            });
+
             appendLog(`Loaded study with ${data.trials.length} trials`, 'info');
 
         } catch (e) {
@@ -409,72 +610,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadStudyFromOutput() {
-        const outputDir = document.getElementById('output_dir').value;
-        if (!outputDir) return;
-
-        const dbPath = `${outputDir}/params.db`;
-        dbPathInput.value = dbPath;
-
+    // --- Auto Load Current Study ---
+    async function checkCurrentStudy() {
         try {
-            const resp = await fetch(`/study/vespatune?db_path=${encodeURIComponent(dbPath)}`);
+            const resp = await fetch('/current_study');
             const data = await resp.json();
 
-            if (!data.error) {
-                displayStudyResults(data);
+            if (data.db_path) {
+                dbPathInput.value = data.db_path;
+                // Auto-load existing results
+                await fetchAndDisplayStudy(data.db_path);
+            }
+
+            if (data.is_training) {
+                setTrainingState(true);
+                setStatus('Training in progress (Resumed)', 'running');
+                connectWebSocket();
             }
         } catch (e) {
             console.error(e);
         }
     }
 
-    function displayStudyResults(data) {
-        // Update best params
-        bestParams.textContent = JSON.stringify(data.best_params, null, 2);
-
-        // Update metrics
-        bestScore.textContent = data.best_value?.toFixed(6) || '--';
-
-        // Populate trials from study
-        trials = data.trials.map(t => ({
-            number: t.number,
-            value: t.value,
-            params: t.params,
-            time: t.datetime_complete ? new Date(t.datetime_complete) : new Date()
-        }));
-
-        // Sort by number for chart
-        trials.sort((a, b) => a.number - b.number);
-
-        trialCount.textContent = trials.length;
-        historyCount.textContent = trials.length;
-
-        if (trials.length > 0) {
-            latestScore.textContent = trials[trials.length - 1].value.toFixed(6);
-            bestValue = Math.min(...trials.map(t => t.value));
-        }
-
-        // Update trial list (sorted by value, best first)
-        const sortedTrials = [...trials].sort((a, b) => a.value - b.value);
-        trialList.innerHTML = '';
-
-        sortedTrials.forEach((t, idx) => {
-            const div = document.createElement('div');
-            div.className = `trial-item${idx === 0 ? ' best' : ''}`;
-            div.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span class="trial-number">#${t.number}</span>
-                    <span class="trial-params" title="${JSON.stringify(t.params)}">${JSON.stringify(t.params).substring(0, 40)}...</span>
-                </div>
-                <span class="trial-value">${t.value?.toFixed(6)}</span>
-            `;
-            trialList.appendChild(div);
-        });
-
-        // Update chart
-        updateChart();
-    }
-
-    // --- Initialize ---
+    // Initialize
+    initChart();
+    connectWebSocket(); // Connect immediately to catch logs
+    checkCurrentStudy();
+    loadConfig(); // Restore config
     setStatus('Ready', '');
 });

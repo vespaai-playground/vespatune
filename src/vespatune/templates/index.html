@@ -8,7 +8,8 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -107,7 +108,10 @@
                         </div>
                     </div>
 
-                    <button type="submit" id="start-btn">Start Training</button>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="submit" id="start-btn">Start Training</button>
+                        <button type="button" id="stop-btn" class="btn-danger" style="display: none;">Stop</button>
+                    </div>
                 </form>
 
                 <!-- Load Past Study -->
@@ -147,7 +151,14 @@
 
                 <!-- Chart Area -->
                 <div class="chart-container">
-                    <h3>Optimization Progress</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h3>Optimization Progress</h3>
+                        <div class="header-controls">
+                             <select id="metric-select" class="small-select" style="width: auto; padding: 0.25rem 0.5rem;">
+                                <option value="value">Objective Value</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="chart-area" id="chart-area">
                         <canvas id="optimization-chart"></canvas>
                         <div class="chart-placeholder" id="chart-placeholder">
@@ -179,6 +190,26 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Trial Details Modal -->
+    <div id="trial-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Trial Details</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <h4>Metrics</h4>
+                    <pre id="modal-metrics">--</pre>
+                </div>
+                <div class="modal-section">
+                    <h4>Parameters</h4>
+                    <pre id="modal-params">--</pre>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/app.js"></script>

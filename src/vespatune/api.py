@@ -28,6 +28,12 @@ from .enums import TaskType
 
 app = FastAPI()
 
+
+# Global state
+ACTIVE_STUDY_PATH = None
+STOP_TRAINING = False
+IS_TRAINING = False
+
 # Create uploads directory if it doesn't exist
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -91,6 +97,7 @@ def optuna_callback(study, trial):
             "number": trial.number,
             "value": trial.value,
             "params": trial.params,
+            "user_attrs": trial.user_attrs,
             "best_value": study.best_value,
             "best_params": study.best_params,
         }
@@ -140,7 +147,23 @@ def run_training(config: TrainRequest):
             manager.broadcast({"type": "status", "message": "Processing data..."})
         )
 
-        vt.train(callbacks=[optuna_callback])
+        # Reset stop signal
+        global STOP_TRAINING, ACTIVE_STUDY_PATH, IS_TRAINING
+        STOP_TRAINING = False
+        IS_TRAINING = True
+        ACTIVE_STUDY_PATH = f"{config.output_dir}/params.db"
+
+        # Callbacks
+        def optuna_check_stop(study, trial):
+            if STOP_TRAINING:
+                study.stop()
+                raise optuna.exceptions.TrialPruned("Training cancelled by user")
+
+        def simple_check_stop():
+            if STOP_TRAINING:
+                raise optuna.exceptions.TrialPruned("Training cancelled by user")
+
+        vt.train(callbacks=[optuna_callback, optuna_check_stop], check_stop=simple_check_stop)
 
         # Notify complete
         asyncio.run(
@@ -148,10 +171,19 @@ def run_training(config: TrainRequest):
                 {"type": "status", "message": "Training completed successfully!"}
             )
         )
-        asyncio.run(manager.broadcast({"type": "training_finished"}))
+
+    except optuna.exceptions.TrialPruned as e:
+         asyncio.run(
+            manager.broadcast({"type": "status", "message": "Training cancelled"})
+        )
+         asyncio.run(manager.broadcast({"type": "info", "message": str(e)}))
 
     except Exception as e:
         asyncio.run(manager.broadcast({"type": "error", "message": str(e)}))
+
+    finally:
+        IS_TRAINING = False
+        asyncio.run(manager.broadcast({"type": "training_finished"}))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -179,6 +211,30 @@ async def upload_file(file: UploadFile = File(...)):
     return {"filename": file.filename, "path": file_location, "columns": columns}
 
 
+@app.get("/columns")
+def get_columns(path: str):
+    if not os.path.exists(path):
+        return {"error": "File not found"}
+    
+    try:
+        df = pd.read_csv(path, nrows=5)
+        return {"columns": list(df.columns)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/current_study")
+def get_current_study():
+    return {"db_path": ACTIVE_STUDY_PATH, "is_training": IS_TRAINING}
+
+
+@app.post("/stop")
+def stop_training():
+    global STOP_TRAINING
+    STOP_TRAINING = True
+    return {"message": "Stopping training..."}
+
+
 @app.get("/study/{study_name}")
 def get_study(study_name: str, db_path: str):
     storage = f"sqlite:///{db_path}"
@@ -201,6 +257,7 @@ def get_study(study_name: str, db_path: str):
                             else None
                         ),
                         "duration": t.duration.total_seconds() if t.duration else None,
+                        "user_attrs": t.user_attrs,
                     }
                 )
         return {
