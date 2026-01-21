@@ -30,6 +30,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const startBtn = document.getElementById('start-btn');
     const metricSelect = document.getElementById('metric-select');
 
+    // Summary Elements
+    const summaryDiv = document.getElementById('training-summary');
+    const sumTrainFile = document.getElementById('sum-train-file');
+    const sumValidFile = document.getElementById('sum-valid-file');
+    const sumTarget = document.getElementById('sum-target');
+    const sumId = document.getElementById('sum-id');
+    const sumModel = document.getElementById('sum-model');
+    const sumOutput = document.getElementById('sum-output');
+
     // Modal Elements
     const modal = document.getElementById('trial-modal');
     const modalTitle = document.getElementById('modal-title');
@@ -375,14 +384,47 @@ document.addEventListener('DOMContentLoaded', () => {
     function setTrainingState(active) {
         isTraining = active;
         if (active) {
-            startBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
+            form.style.display = 'none';
+            summaryDiv.style.display = 'block';
+            updateSummary();
             stopBtn.disabled = false;
-            stopBtn.textContent = 'Stop';
+            stopBtn.textContent = 'Stop Training';
         } else {
-            startBtn.style.display = 'inline-block';
-            stopBtn.style.display = 'none';
+            form.style.display = 'block';
+            summaryDiv.style.display = 'none';
         }
+    }
+
+    function updateSummary() {
+        const trainInfo = document.getElementById('train_file_info').textContent;
+        const validInfo = document.getElementById('valid_file_info').textContent;
+        const savedConfig = localStorage.getItem('vespatune_config') ? JSON.parse(localStorage.getItem('vespatune_config')) : {};
+
+        // Use form values if populated, otherwise fallback to saved config
+        const trainVal = trainInfo !== 'Click to upload' ? trainInfo : (document.getElementById('train_filename').value || savedConfig.train_filename || '--');
+        const validVal = validInfo !== 'Click to upload' ? validInfo : (document.getElementById('valid_filename').value || savedConfig.valid_filename || '--');
+
+        sumTrainFile.textContent = trainVal;
+        sumValidFile.textContent = validVal;
+
+        let targets = Array.from(targetSelect.selectedOptions).map(o => o.value).join(', ');
+        if (!targets && savedConfig.target_columns) {
+            targets = Array.isArray(savedConfig.target_columns) ? savedConfig.target_columns.join(', ') : savedConfig.target_columns;
+        }
+        sumTarget.textContent = targets || 'None';
+
+        // Handle ID column
+        let idVal = document.getElementById('id_column').value;
+        if (!idVal && savedConfig.id_column) {
+            idVal = savedConfig.id_column;
+        }
+        sumId.textContent = idVal || 'None';
+
+        const modelType = document.getElementById('model_type').value || savedConfig.model_type || '--';
+        const taskType = document.getElementById('task').value || savedConfig.task || '--';
+        sumModel.textContent = `${modelType} (${taskType})`;
+
+        sumOutput.textContent = document.getElementById('output_dir').value || savedConfig.output_dir || '--';
     }
 
     function resetState() {

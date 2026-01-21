@@ -337,9 +337,17 @@ button:disabled {
 }
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 .progress-info {
@@ -533,9 +541,17 @@ button:disabled {
     word-break: break-all;
 }
 
-.log-line.error { color: var(--error-color); }
-.log-line.warning { color: var(--warning-color); }
-.log-line.info { color: var(--text-dim); }
+.log-line.error {
+    color: var(--error-color);
+}
+
+.log-line.warning {
+    color: var(--warning-color);
+}
+
+.log-line.info {
+    color: var(--text-dim);
+}
 
 /* Modal */
 .modal {
@@ -565,8 +581,15 @@ button:disabled {
 }
 
 @keyframes modalSlideIn {
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .modal-header {
@@ -644,3 +667,32 @@ button:disabled {
     background: var(--border-light);
 }
 
+/* Training Summary */
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.summary-item:last-child {
+    border-bottom: none;
+}
+
+.summary-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.summary-value {
+    color: var(--text-color);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

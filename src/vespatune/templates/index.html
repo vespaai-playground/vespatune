@@ -8,7 +8,9 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
@@ -110,12 +112,46 @@
 
                     <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
                         <button type="submit" id="start-btn">Start Training</button>
-                        <button type="button" id="stop-btn" class="btn-danger" style="display: none;">Stop</button>
                     </div>
                 </form>
 
+                <!-- Training Summary (Hidden by default) -->
+                <div id="training-summary" style="display: none;">
+                    <div class="section-group">
+                        <h3>Training in Progress</h3>
+                        <div class="summary-item">
+                            <span class="summary-label">Train Data:</span>
+                            <span class="summary-value" id="sum-train-file">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Valid Data:</span>
+                            <span class="summary-value" id="sum-valid-file">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Target:</span>
+                            <span class="summary-value" id="sum-target">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">ID Column:</span>
+                            <span class="summary-value" id="sum-id">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Model:</span>
+                            <span class="summary-value" id="sum-model">--</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Output:</span>
+                            <span class="summary-value" id="sum-output">--</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1.5rem;">
+                        <button type="button" id="stop-btn" class="btn-danger">Stop Training</button>
+                    </div>
+                </div>
+
                 <!-- Load Past Study -->
-                <div class="section-group" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                <div class="section-group"
+                    style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
                     <h3>Load Past Study</h3>
                     <div class="form-group">
                         <label for="db_path">Database Path</label>
@@ -151,10 +187,12 @@
 
                 <!-- Chart Area -->
                 <div class="chart-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                         <h3>Optimization Progress</h3>
                         <div class="header-controls">
-                             <select id="metric-select" class="small-select" style="width: auto; padding: 0.25rem 0.5rem;">
+                            <select id="metric-select" class="small-select"
+                                style="width: auto; padding: 0.25rem 0.5rem;">
                                 <option value="value">Objective Value</option>
                             </select>
                         </div>
