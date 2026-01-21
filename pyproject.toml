@@ -1,0 +1,80 @@
+[project]
+name = "vespatune"
+version = "0.3.0"
+description = "vespatune: tuning xgboost with optuna"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache 2.0"}
+authors = [
+    {name = "Abhishek Thakur"}
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "rich>=13.0.0",
+    "numpy>=2.2.0",
+    "optuna>=4.1.0",
+    "pyarrow>=18.1.0",
+    "pydantic>=2.10.0",
+    "joblib>=1.4.2",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.6.0",
+    "uvicorn>=0.34.0",
+    "xgboost>=2.1.0",
+    "onnx>=1.17.0",
+    "onnxmltools>=1.12.0",
+    "onnxruntime>=1.23.2",
+]
+
+[project.optional-dependencies]
+onnxruntime = ["onnxruntime>=1.20.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/abhishekkrthakur/autoxgb"
+
+[project.scripts]
+vespatune = "vespatune.cli.vespatune:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.isort]
+ensure_newline_before_comments = true
+force_grid_wrap = 0
+include_trailing_comma = true
+line_length = 119
+lines_after_imports = 2
+multi_line_output = 3
+use_parentheses = true
+
+[tool.flake8]
+ignore = ["E203", "E501", "W503"]
+max-line-length = 119
+per-file-ignores = ["__init__.py:F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+addopts = "-v --tb=short"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+]
