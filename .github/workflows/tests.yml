@@ -28,6 +28,10 @@ jobs:
       with:
         enable-cache: true
 
+    - name: Install OpenMP (macOS)
+      if: runner.os == 'macOS'
+      run: brew install libomp
+
     - name: Create virtual environment
       run: uv venv
 
