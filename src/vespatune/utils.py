@@ -34,15 +34,9 @@ def reduce_memory_usage(df, verbose=True):
                 elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
                     df[col] = df[col].astype(np.int64)
             else:
-                if (
-                    c_min > np.finfo(np.float16).min
-                    and c_max < np.finfo(np.float16).max
-                ):
+                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
                     df[col] = df[col].astype(np.float16)
-                elif (
-                    c_min > np.finfo(np.float32).min
-                    and c_max < np.finfo(np.float32).max
-                ):
+                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
                     df[col] = df[col].astype(np.float32)
                 else:
                     df[col] = df[col].astype(np.float64)
@@ -81,11 +75,7 @@ def get_categorical_indices(model_config):
     """Get indices of categorical features."""
     if not model_config.categorical_features:
         return None
-    return [
-        model_config.features.index(f)
-        for f in model_config.categorical_features
-        if f in model_config.features
-    ]
+    return [model_config.features.index(f) for f in model_config.categorical_features if f in model_config.features]
 
 
 def optimize(trial, model_config):
@@ -177,9 +167,7 @@ def train_model(model_config):
         storage=f"sqlite:///{db_path}",
         load_if_exists=True,
     )
-    study.optimize(
-        optimize_func, n_trials=model_config.num_trials, timeout=model_config.time_limit
-    )
+    study.optimize(optimize_func, n_trials=model_config.num_trials, timeout=model_config.time_limit)
     return study.best_params
 
 
@@ -191,7 +179,7 @@ def train_final_model(model_config, best_params):
     problem_type_str = model_config.problem_type.name
 
     best_params = copy.deepcopy(best_params)
-    early_stopping_rounds = best_params.pop("early_stopping_rounds", None)
+    best_params.pop("early_stopping_rounds", None)  # Remove, not used in final training
 
     # Handle GPU settings for XGBoost
     if model_config.use_gpu and model_name == "xgboost":
@@ -304,13 +292,9 @@ def _generate_test_predictions(model_config, final_model):
     if target_encoder is None:
         test_preds_df = pd.DataFrame(test_preds, columns=model_config.targets)
     else:
-        test_preds_df = pd.DataFrame(
-            test_preds, columns=list(target_encoder.classes_)
-        )
+        test_preds_df = pd.DataFrame(test_preds, columns=list(target_encoder.classes_))
     test_preds_df.insert(loc=0, column=model_config.idx, value=test_ids)
-    test_preds_df.to_csv(
-        os.path.join(model_config.output, "test_predictions.csv"), index=False
-    )
+    test_preds_df.to_csv(os.path.join(model_config.output, "test_predictions.csv"), index=False)
     logger.info("Test predictions saved to test_predictions.csv")
 
 

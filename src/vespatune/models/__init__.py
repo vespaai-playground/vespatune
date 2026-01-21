@@ -42,9 +42,7 @@ def get_model(model_name: str, problem_type: str, random_state: int = 42) -> Bas
     model_name = model_name.lower()
     if model_name not in MODEL_REGISTRY:
         available = ", ".join(MODEL_REGISTRY.keys())
-        raise ValueError(
-            f"Unknown model: {model_name}. Available models: {available}"
-        )
+        raise ValueError(f"Unknown model: {model_name}. Available models: {available}")
 
     model_class = MODEL_REGISTRY[model_name]
     return model_class(problem_type=problem_type, random_state=random_state)

@@ -6,6 +6,7 @@ import xgboost as xgb
 
 from .base import BaseModel
 
+
 xgb.set_config(verbosity=0)
 
 
@@ -44,9 +45,7 @@ class XGBoostModel(BaseModel):
             params["device"] = "cuda"
             params["tree_method"] = "hist"
         else:
-            params["tree_method"] = trial.suggest_categorical(
-                "tree_method", ["hist", "approx"]
-            )
+            params["tree_method"] = trial.suggest_categorical("tree_method", ["hist", "approx"])
 
         # Booster selection (excluding gblinear for ONNX compatibility)
         booster = trial.suggest_categorical("booster", ["gbtree", "dart"])
@@ -64,12 +63,8 @@ class XGBoostModel(BaseModel):
 
         # Dart-specific parameters
         if booster == "dart":
-            params["sample_type"] = trial.suggest_categorical(
-                "sample_type", ["uniform", "weighted"]
-            )
-            params["normalize_type"] = trial.suggest_categorical(
-                "normalize_type", ["tree", "forest"]
-            )
+            params["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
+            params["normalize_type"] = trial.suggest_categorical("normalize_type", ["tree", "forest"])
             params["rate_drop"] = trial.suggest_float("rate_drop", 0.0, 0.3)
             params["skip_drop"] = trial.suggest_float("skip_drop", 0.0, 0.5)
 
@@ -81,18 +76,14 @@ class XGBoostModel(BaseModel):
     def _add_task_specific_params(self, trial, params: Dict) -> Dict:
         """Add task-specific parameters."""
         if self.problem_type == "binary_classification":
-            params["scale_pos_weight"] = trial.suggest_float(
-                "scale_pos_weight", 0.1, 10.0, log=True
-            )
+            params["scale_pos_weight"] = trial.suggest_float("scale_pos_weight", 0.1, 10.0, log=True)
             params["max_delta_step"] = trial.suggest_float("max_delta_step", 0.0, 10.0)
 
         elif self.problem_type == "multi_class_classification":
             params["max_depth"] = trial.suggest_int("max_depth", 4, 15)
 
         elif self.problem_type == "multi_label_classification":
-            params["scale_pos_weight"] = trial.suggest_float(
-                "scale_pos_weight", 0.1, 10.0, log=True
-            )
+            params["scale_pos_weight"] = trial.suggest_float("scale_pos_weight", 0.1, 10.0, log=True)
             params["max_delta_step"] = trial.suggest_float("max_delta_step", 0.0, 10.0)
 
         elif self.problem_type in ("single_column_regression", "multi_column_regression"):

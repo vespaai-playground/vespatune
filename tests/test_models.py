@@ -1,12 +1,13 @@
-import numpy as np
-import pytest
 from unittest.mock import MagicMock
 
-from vespatune.models import get_model, list_models, register_model, MODEL_REGISTRY
+import numpy as np
+import pytest
+
+from vespatune.models import MODEL_REGISTRY, get_model, list_models, register_model
 from vespatune.models.base import BaseModel
-from vespatune.models.xgboost_model import XGBoostModel
-from vespatune.models.lightgbm_model import LightGBMModel
 from vespatune.models.catboost_model import CatBoostModel
+from vespatune.models.lightgbm_model import LightGBMModel
+from vespatune.models.xgboost_model import XGBoostModel
 
 
 class TestModelRegistry:
@@ -271,7 +272,7 @@ class TestGetParams:
         model_config = MagicMock()
         model_config.use_gpu = False
 
-        params = model.get_params(trial, model_config)
+        model.get_params(trial, model_config)
         assert trial.suggest_float.called or trial.suggest_int.called
 
     def test_catboost_get_params(self):
@@ -284,5 +285,5 @@ class TestGetParams:
         model_config = MagicMock()
         model_config.use_gpu = False
 
-        params = model.get_params(trial, model_config)
+        model.get_params(trial, model_config)
         assert trial.suggest_float.called or trial.suggest_int.called

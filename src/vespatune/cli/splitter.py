@@ -18,9 +18,7 @@ def splitter_vespatune_command_factory(args):
 class SplitterVespaTuneCommand(BaseCommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        _parser = parser.add_parser(
-            "splitter", help="Split data into k folds for cross-validation"
-        )
+        _parser = parser.add_parser("splitter", help="Split data into k folds for cross-validation")
         _parser.add_argument(
             "--input_filename",
             help="Path to input CSV file",

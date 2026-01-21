@@ -72,9 +72,7 @@ class VespaTuneSplitter:
 
         if strategy == "stratified":
             y = df[self.targets].values
-            kf = StratifiedKFold(
-                n_splits=self.num_folds, shuffle=True, random_state=self.seed
-            )
+            kf = StratifiedKFold(n_splits=self.num_folds, shuffle=True, random_state=self.seed)
             for fold, (_, valid_idx) in enumerate(kf.split(X=df, y=y)):
                 df.loc[valid_idx, "_fold"] = fold
 
@@ -83,9 +81,7 @@ class VespaTuneSplitter:
             y = df[self.targets].values.ravel()
             num_bins = min(10, int(np.floor(1 + np.log2(len(df)))))
             bins = pd.cut(y, bins=num_bins, labels=False)
-            kf = StratifiedKFold(
-                n_splits=self.num_folds, shuffle=True, random_state=self.seed
-            )
+            kf = StratifiedKFold(n_splits=self.num_folds, shuffle=True, random_state=self.seed)
             for fold, (_, valid_idx) in enumerate(kf.split(X=df, y=bins)):
                 df.loc[valid_idx, "_fold"] = fold
 
@@ -106,17 +102,17 @@ class VespaTuneSplitter:
             train_df.to_csv(train_path, index=False)
             valid_df.to_csv(valid_path, index=False)
 
-            fold_files.append({
-                "fold": fold,
-                "train_path": train_path,
-                "valid_path": valid_path,
-                "train_size": len(train_df),
-                "valid_size": len(valid_df),
-            })
-
-            logger.info(
-                f"Fold {fold}: train={len(train_df)} samples, valid={len(valid_df)} samples"
+            fold_files.append(
+                {
+                    "fold": fold,
+                    "train_path": train_path,
+                    "valid_path": valid_path,
+                    "train_size": len(train_df),
+                    "valid_size": len(valid_df),
+                }
             )
+
+            logger.info(f"Fold {fold}: train={len(train_df)} samples, valid={len(valid_df)} samples")
 
         logger.info(f"Successfully created {self.num_folds} fold splits in {self.output_dir}")
         return fold_files

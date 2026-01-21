@@ -150,16 +150,12 @@ class VespaTuneExport:
         if verify:
             self._verify_exports(exported_files)
 
-        logger.info(
-            f"Successfully exported {len(exported_files)} ONNX model(s) to {output_dir}"
-        )
+        logger.info(f"Successfully exported {len(exported_files)} ONNX model(s) to {output_dir}")
         return exported_files
 
     def _export_metadata(self, output_dir: str):
         # Create mapping from ONNX feature names (f0, f1, ...) to original names
-        feature_mapping = {
-            f"f{i}": name for i, name in enumerate(self.model_config.features)
-        }
+        feature_mapping = {f"f{i}": name for i, name in enumerate(self.model_config.features)}
 
         metadata = {
             "features": self.model_config.features,
@@ -195,9 +191,7 @@ class VespaTuneExport:
         try:
             import onnxruntime as ort
         except ImportError:
-            logger.warning(
-                "onnxruntime not installed. Skipping verification. Install with: pip install onnxruntime"
-            )
+            logger.warning("onnxruntime not installed. Skipping verification. Install with: pip install onnxruntime")
             return
 
         n_features = len(self.model_config.features)

@@ -33,9 +33,7 @@ class CatBoostModel(BaseModel):
         }
 
         # Bootstrap type
-        bootstrap_type = trial.suggest_categorical(
-            "bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]
-        )
+        bootstrap_type = trial.suggest_categorical("bootstrap_type", ["Bayesian", "Bernoulli", "MVS"])
         params["bootstrap_type"] = bootstrap_type
 
         if bootstrap_type == "Bernoulli":
@@ -44,9 +42,7 @@ class CatBoostModel(BaseModel):
             params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
 
         # Grow policy
-        grow_policy = trial.suggest_categorical(
-            "grow_policy", ["SymmetricTree", "Depthwise", "Lossguide"]
-        )
+        grow_policy = trial.suggest_categorical("grow_policy", ["SymmetricTree", "Depthwise", "Lossguide"])
         params["grow_policy"] = grow_policy
 
         if grow_policy in ("Depthwise", "Lossguide"):
@@ -65,9 +61,7 @@ class CatBoostModel(BaseModel):
             params["task_type"] = "CPU"
 
         # Leaf estimation
-        params["leaf_estimation_iterations"] = trial.suggest_int(
-            "leaf_estimation_iterations", 1, 10
-        )
+        params["leaf_estimation_iterations"] = trial.suggest_int("leaf_estimation_iterations", 1, 10)
 
         # Task-specific parameters
         params = self._add_task_specific_params(trial, params)

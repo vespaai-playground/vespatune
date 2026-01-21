@@ -1,6 +1,5 @@
-from dataclasses import dataclass
-
 import copy
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn import metrics as skmetrics

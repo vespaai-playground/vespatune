@@ -32,9 +32,7 @@ def get_params(trial, model_config):
         params["device"] = "cuda"
         params["tree_method"] = "hist"
     else:
-        params["tree_method"] = trial.suggest_categorical(
-            "tree_method", ["hist", "approx"]
-        )
+        params["tree_method"] = trial.suggest_categorical("tree_method", ["hist", "approx"])
 
     # Booster selection (gbtree or dart, excluding gblinear for ONNX compatibility)
     booster = trial.suggest_categorical("booster", ["gbtree", "dart"])
@@ -52,12 +50,8 @@ def get_params(trial, model_config):
 
     # Dart-specific parameters
     if booster == "dart":
-        params["sample_type"] = trial.suggest_categorical(
-            "sample_type", ["uniform", "weighted"]
-        )
-        params["normalize_type"] = trial.suggest_categorical(
-            "normalize_type", ["tree", "forest"]
-        )
+        params["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
+        params["normalize_type"] = trial.suggest_categorical("normalize_type", ["tree", "forest"])
         params["rate_drop"] = trial.suggest_float("rate_drop", 0.0, 0.3)
         params["skip_drop"] = trial.suggest_float("skip_drop", 0.0, 0.5)
 
@@ -116,7 +110,7 @@ def _add_regression_params(trial, params):
             "reg:squarederror",
             "reg:squaredlogerror",
             "reg:pseudohubererror",
-        ]
+        ],
     )
     params["objective"] = objective
 

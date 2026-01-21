@@ -10,8 +10,8 @@ from sklearn.utils.multiclass import type_of_target
 
 from .enums import ProblemType
 from .logger import logger
-from .schemas import ModelConfig
 from .models import list_models
+from .schemas import ModelConfig
 from .utils import reduce_memory_usage, train_final_model, train_model
 
 
@@ -37,9 +37,7 @@ class VespaTune:
 
     def __post_init__(self):
         if os.path.exists(self.output):
-            raise Exception(
-                "Output directory already exists. Please specify some other directory."
-            )
+            raise Exception("Output directory already exists. Please specify some other directory.")
         os.makedirs(self.output, exist_ok=True)
         logger.info(f"Output directory: {self.output}")
 
@@ -55,8 +53,7 @@ class VespaTune:
         available_models = list_models()
         if self.model_type.lower() not in available_models:
             raise ValueError(
-                f"Unknown model type: {self.model_type}. "
-                f"Available models: {', '.join(available_models)}"
+                f"Unknown model type: {self.model_type}. " f"Available models: {', '.join(available_models)}"
             )
         self.model_type = self.model_type.lower()
         logger.info(f"Model type: {self.model_type}")
@@ -93,9 +90,7 @@ class VespaTune:
             elif target_type == "multilabel-indicator":
                 problem_type = ProblemType.multi_label_classification
             else:
-                raise Exception(
-                    "Unable to infer `problem_type`. Please provide `classification` or `regression`"
-                )
+                raise Exception("Unable to infer `problem_type`. Please provide `classification` or `regression`")
         logger.info(f"Problem type: {problem_type.name}")
         return problem_type
 
@@ -138,12 +133,8 @@ class VespaTune:
             logger.info("Encoding target(s)")
             target_encoder = LabelEncoder()
             target_encoder.fit(train_df[self.targets].values.reshape(-1))
-            train_df.loc[:, self.targets] = target_encoder.transform(
-                train_df[self.targets].values.reshape(-1)
-            )
-            valid_df.loc[:, self.targets] = target_encoder.transform(
-                valid_df[self.targets].values.reshape(-1)
-            )
+            train_df.loc[:, self.targets] = target_encoder.transform(train_df[self.targets].values.reshape(-1))
+            valid_df.loc[:, self.targets] = target_encoder.transform(valid_df[self.targets].values.reshape(-1))
         else:
             target_encoder = None
 
@@ -160,19 +151,11 @@ class VespaTune:
         # encode categorical features
         if len(categorical_features) > 0:
             logger.info("Encoding categorical features")
-            categorical_encoder = OrdinalEncoder(
-                handle_unknown="use_encoded_value", unknown_value=np.nan
-            )
-            train_df[categorical_features] = categorical_encoder.fit_transform(
-                train_df[categorical_features].values
-            )
-            valid_df[categorical_features] = categorical_encoder.transform(
-                valid_df[categorical_features].values
-            )
+            categorical_encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=np.nan)
+            train_df[categorical_features] = categorical_encoder.fit_transform(train_df[categorical_features].values)
+            valid_df[categorical_features] = categorical_encoder.transform(valid_df[categorical_features].values)
             if self.test_filename is not None:
-                test_df[categorical_features] = categorical_encoder.transform(
-                    test_df[categorical_features].values
-                )
+                test_df[categorical_features] = categorical_encoder.transform(test_df[categorical_features].values)
         else:
             categorical_encoder = None
 

@@ -12,9 +12,7 @@ def main():
         usage="vespatune <command> [<args>]",
         epilog="For more information about a command, run: `vespatune <command> --help`",
     )
-    parser.add_argument(
-        "--version", "-v", help="Display VespaTune version", action="store_true"
-    )
+    parser.add_argument("--version", "-v", help="Display VespaTune version", action="store_true")
 
     commands_parser = parser.add_subparsers(help="commands")
     TrainVespaTuneCommand.register_subcommand(commands_parser)

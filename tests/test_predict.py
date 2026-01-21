@@ -389,9 +389,7 @@ class TestVespaTuneONNXPredictFile:
         """Test file-based ONNX prediction for regression."""
         predictor = VespaTuneONNXPredict(model_path=onnx_regression_model["onnx_path"])
 
-        output_path = os.path.join(
-            onnx_regression_model["temp_dir"], "onnx_predictions.csv"
-        )
+        output_path = os.path.join(onnx_regression_model["temp_dir"], "onnx_predictions.csv")
         predictor.predict_file(
             test_filename=onnx_regression_model["test_path"],
             out_filename=output_path,

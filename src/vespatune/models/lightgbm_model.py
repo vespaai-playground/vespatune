@@ -19,8 +19,6 @@ class LightGBMModel(BaseModel):
 
     def get_params(self, trial, model_config) -> Dict[str, Any]:
         """Get LightGBM hyperparameters for Optuna trial."""
-        import lightgbm as lgb
-
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
             "n_estimators": trial.suggest_int("n_estimators", 500, 10000),
@@ -39,9 +37,7 @@ class LightGBMModel(BaseModel):
         }
 
         # Boosting type
-        boosting_type = trial.suggest_categorical(
-            "boosting_type", ["gbdt", "dart", "goss"]
-        )
+        boosting_type = trial.suggest_categorical("boosting_type", ["gbdt", "dart", "goss"])
         params["boosting_type"] = boosting_type
 
         # GOSS-specific parameters
@@ -64,9 +60,7 @@ class LightGBMModel(BaseModel):
         params["path_smooth"] = trial.suggest_float("path_smooth", 0.0, 1.0)
 
         # Feature fraction parameters
-        params["feature_fraction_bynode"] = trial.suggest_float(
-            "feature_fraction_bynode", 0.3, 1.0
-        )
+        params["feature_fraction_bynode"] = trial.suggest_float("feature_fraction_bynode", 0.3, 1.0)
 
         # Task-specific parameters
         params = self._add_task_specific_params(trial, params)
@@ -78,13 +72,9 @@ class LightGBMModel(BaseModel):
         if self.problem_type == "binary_classification":
             params["objective"] = "binary"
             params["metric"] = "binary_logloss"
-            params["is_unbalance"] = trial.suggest_categorical(
-                "is_unbalance", [True, False]
-            )
+            params["is_unbalance"] = trial.suggest_categorical("is_unbalance", [True, False])
             if not params["is_unbalance"]:
-                params["scale_pos_weight"] = trial.suggest_float(
-                    "scale_pos_weight", 0.1, 10.0, log=True
-                )
+                params["scale_pos_weight"] = trial.suggest_float("scale_pos_weight", 0.1, 10.0, log=True)
 
         elif self.problem_type == "multi_class_classification":
             params["objective"] = "multiclass"

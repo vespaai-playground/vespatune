@@ -1,7 +1,6 @@
 import os
 
 import joblib
-import pandas as pd
 import pytest
 
 from vespatune import VespaTune

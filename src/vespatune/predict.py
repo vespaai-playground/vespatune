@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 import joblib
 import numpy as np
@@ -23,12 +23,8 @@ class VespaTunePredict:
 
     def __post_init__(self):
         self.model_config = joblib.load(os.path.join(self.model_path, "vtune.config"))
-        self.target_encoder = joblib.load(
-            os.path.join(self.model_path, "vtune.target_encoder")
-        )
-        self.categorical_encoder = joblib.load(
-            os.path.join(self.model_path, "vtune.categorical_encoder")
-        )
+        self.target_encoder = joblib.load(os.path.join(self.model_path, "vtune.target_encoder"))
+        self.categorical_encoder = joblib.load(os.path.join(self.model_path, "vtune.categorical_encoder"))
         self.model = joblib.load(os.path.join(self.model_path, "vtune_model.final"))
         _, self.use_predict_proba, _, _ = fetch_xgb_model_params(self.model_config)
 
@@ -49,9 +45,7 @@ class VespaTunePredict:
 
         test_df = df.copy(deep=True)
         if len(categorical_features) > 0 and self.categorical_encoder is not None:
-            test_df[categorical_features] = self.categorical_encoder.transform(
-                test_df[categorical_features].values
-            )
+            test_df[categorical_features] = self.categorical_encoder.transform(test_df[categorical_features].values)
 
         test_features = test_df[self.model_config.features]
 
@@ -65,10 +59,7 @@ class VespaTunePredict:
         ):
             preds_list = []
             for idx in range(len(self.model)):
-                if (
-                    self.model_config.problem_type
-                    == ProblemType.multi_column_regression
-                ):
+                if self.model_config.problem_type == ProblemType.multi_column_regression:
                     pred = self.model[idx].predict(test_features)
                 else:
                     pred = self.model[idx].predict_proba(test_features)[:, 1]
@@ -83,9 +74,7 @@ class VespaTunePredict:
         if self.target_encoder is None:
             final_preds = pd.DataFrame(final_preds, columns=self.model_config.targets)
         else:
-            final_preds = pd.DataFrame(
-                final_preds, columns=list(self.target_encoder.classes_)
-            )
+            final_preds = pd.DataFrame(final_preds, columns=list(self.target_encoder.classes_))
         final_preds.insert(loc=0, column=self.model_config.idx, value=test_ids)
         return final_preds
 
@@ -119,10 +108,7 @@ class VespaTuneONNXPredict:
         try:
             import onnxruntime as ort
         except ImportError:
-            raise ImportError(
-                "onnxruntime is required for ONNX inference. "
-                "Install with: pip install onnxruntime"
-            )
+            raise ImportError("onnxruntime is required for ONNX inference. " "Install with: pip install onnxruntime")
 
         # Load metadata
         metadata_path = os.path.join(self.model_path, "metadata.json")

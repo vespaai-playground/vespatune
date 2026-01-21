@@ -21,14 +21,16 @@ def binary_classification_data(temp_dir):
     np.random.seed(42)
     n_samples = 200
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "feature3": np.random.randn(n_samples),
-        "cat_feature": np.random.choice(["A", "B", "C"], n_samples),
-        "target": np.random.randint(0, 2, n_samples),
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "feature3": np.random.randn(n_samples),
+            "cat_feature": np.random.choice(["A", "B", "C"], n_samples),
+            "target": np.random.randint(0, 2, n_samples),
+        }
+    )
 
     train_df = df.iloc[:150].reset_index(drop=True)
     valid_df = df.iloc[150:180].reset_index(drop=True)
@@ -58,13 +60,15 @@ def multiclass_classification_data(temp_dir):
     np.random.seed(42)
     n_samples = 200
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "feature3": np.random.randn(n_samples),
-        "target": np.random.randint(0, 5, n_samples),
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "feature3": np.random.randn(n_samples),
+            "target": np.random.randint(0, 5, n_samples),
+        }
+    )
 
     train_df = df.iloc[:150].reset_index(drop=True)
     valid_df = df.iloc[150:180].reset_index(drop=True)
@@ -94,13 +98,15 @@ def regression_data(temp_dir):
     np.random.seed(42)
     n_samples = 200
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "feature3": np.random.randn(n_samples),
-        "target": np.random.randn(n_samples) * 10 + 50,
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "feature3": np.random.randn(n_samples),
+            "target": np.random.randn(n_samples) * 10 + 50,
+        }
+    )
 
     train_df = df.iloc[:150].reset_index(drop=True)
     valid_df = df.iloc[150:180].reset_index(drop=True)
@@ -130,14 +136,16 @@ def multi_target_regression_data(temp_dir):
     np.random.seed(42)
     n_samples = 200
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "feature3": np.random.randn(n_samples),
-        "target1": np.random.randn(n_samples) * 10,
-        "target2": np.random.randn(n_samples) * 5,
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "feature3": np.random.randn(n_samples),
+            "target1": np.random.randn(n_samples) * 10,
+            "target2": np.random.randn(n_samples) * 5,
+        }
+    )
 
     train_df = df.iloc[:150].reset_index(drop=True)
     valid_df = df.iloc[150:180].reset_index(drop=True)
@@ -167,12 +175,14 @@ def full_data_file(temp_dir):
     np.random.seed(42)
     n_samples = 100
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "target": np.random.randint(0, 2, n_samples),
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "target": np.random.randint(0, 2, n_samples),
+        }
+    )
 
     data_path = os.path.join(temp_dir, "data.csv")
     df.to_csv(data_path, index=False)
@@ -190,12 +200,14 @@ def regression_data_file(temp_dir):
     np.random.seed(42)
     n_samples = 100
 
-    df = pd.DataFrame({
-        "id": range(n_samples),
-        "feature1": np.random.randn(n_samples),
-        "feature2": np.random.randn(n_samples),
-        "target": np.random.randn(n_samples) * 10 + 50,
-    })
+    df = pd.DataFrame(
+        {
+            "id": range(n_samples),
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.randn(n_samples),
+            "target": np.random.randn(n_samples) * 10 + 50,
+        }
+    )
 
     data_path = os.path.join(temp_dir, "data.csv")
     df.to_csv(data_path, index=False)

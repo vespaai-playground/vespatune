@@ -3,14 +3,11 @@ VespaTune Logger - A beautiful, rich-enabled logging system.
 """
 
 import logging
-import sys
-from datetime import datetime
 from typing import Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
-from rich.style import Style
 from rich.text import Text
 from rich.theme import Theme
 
