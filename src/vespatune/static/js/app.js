@@ -5,11 +5,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let bestValue = null;
     let columns = [];
     let chart = null;
-    let currentMetric = 'value';
+    let currentMetric = 'value'; // default metric to plot
     let availableMetrics = new Set(['value']);
     let isTraining = false;
 
+    // --- New State for Full App ---
+    let runs = [];
+    let activeRunId = null;   // The ID of the currently running process (if any)
+    let selectedRunId = null; // The ID currently displayed in the main view (null = New Training)
+
     // --- DOM Elements ---
+    const runListContainer = document.getElementById('run-list');
+    const newTrainingBtn = document.getElementById('new-training-btn');
     const form = document.getElementById('train-form');
     const logsDiv = document.getElementById('ws-logs');
     const trialList = document.getElementById('trial-list');
@@ -24,9 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const chartPlaceholder = document.getElementById('chart-placeholder');
     const targetSelect = document.getElementById('target_columns');
     const idSelect = document.getElementById('id_column');
-    const loadStudyBtn = document.getElementById('load-study-btn');
-    const dbPathInput = document.getElementById('db_path');
+
     const stopBtn = document.getElementById('stop-btn');
+    const deleteBtn = document.getElementById('delete-btn');
     const startBtn = document.getElementById('start-btn');
     const metricSelect = document.getElementById('metric-select');
 
@@ -37,7 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const sumTarget = document.getElementById('sum-target');
     const sumId = document.getElementById('sum-id');
     const sumModel = document.getElementById('sum-model');
-    const sumOutput = document.getElementById('sum-output');
+    const sumProject = document.getElementById('sum-project');
+    const sumTrials = document.getElementById('sum-trials');
+    const sumTime = document.getElementById('sum-time');
 
     // Modal Elements
     const modal = document.getElementById('trial-modal');
@@ -78,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     columns = data.columns;
                     populateColumnDropdowns(columns);
                 }
-                saveConfig(); // Save state after upload
             } catch (e) {
                 status.textContent = 'Upload failed';
                 console.error(e);
@@ -117,41 +125,20 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUpload('train-upload', 'train_file', 'train_filename', 'train_file_info', true);
     setupUpload('valid-upload', 'valid_file', 'valid_filename', 'valid_file_info', false);
 
-    // --- Configuration Persistence ---
-    function saveConfig() {
-        const config = {
-            train_filename: document.getElementById('train_filename').value,
-            valid_filename: document.getElementById('valid_filename').value,
-            train_file_info: document.getElementById('train_file_info').textContent,
-            valid_file_info: document.getElementById('valid_file_info').textContent,
-            target_columns: Array.from(targetSelect.selectedOptions).map(o => o.value),
-            id_column: idSelect.value,
-        };
-
-        // Save other inputs
-        const inputs = form.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            if (input.type !== 'file' && input.type !== 'hidden' && input.id) {
-                config[input.id] = input.value;
-            }
-        });
-
-        localStorage.setItem('vespatune_config', JSON.stringify(config));
-    }
-
-    async function loadConfig() {
-        const configStr = localStorage.getItem('vespatune_config');
-        if (!configStr) return;
+    async function restoreFormFromConfig(config) {
+        if (!config) return;
 
         try {
-            const config = JSON.parse(configStr);
-
             // Restore file paths
             if (config.train_filename) {
                 document.getElementById('train_filename').value = config.train_filename;
-                const info = document.getElementById('train_file_info');
-                info.textContent = config.train_file_info || config.train_filename;
-                if (config.train_filename) document.getElementById('train-upload').classList.add('uploaded');
+                // For secure temp files, we might not have original filename display, 
+                // but we can try to show something indicative or just "Uploaded File"
+                // Ideally, backend should persist original filename too. 
+                // For now, let's use the path basename or just "Restored File".
+                const display = config.train_filename.split('/').pop();
+                document.getElementById('train_file_info').textContent = display;
+                document.getElementById('train-upload').classList.add('uploaded');
 
                 // Fetch valid columns for this file
                 await fetchAndPopulateColumns(config.train_filename);
@@ -159,16 +146,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (config.valid_filename) {
                 document.getElementById('valid_filename').value = config.valid_filename;
-                const info = document.getElementById('valid_file_info');
-                info.textContent = config.valid_file_info || config.valid_filename;
-                if (config.valid_filename) document.getElementById('valid-upload').classList.add('uploaded');
+                const display = config.valid_filename.split('/').pop();
+                document.getElementById('valid_file_info').textContent = display;
+                document.getElementById('valid-upload').classList.add('uploaded');
             }
 
             // Restore other inputs
             const inputs = form.querySelectorAll('input, select');
             inputs.forEach(input => {
                 if (input.type !== 'file' && input.type !== 'hidden' && input.id && config[input.id] !== undefined) {
-                    // Skip special selects for now
                     if (input.id !== 'target_columns' && input.id !== 'id_column') {
                         input.value = config[input.id];
                     }
@@ -176,9 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Restore Dropdowns (after columns populated)
-            if (config.target_columns && Array.isArray(config.target_columns)) {
+            // Parse target columns (stored as semicolon separated string in TrainRequest/DB)
+            if (config.target_columns) {
+                const targets = config.target_columns.split(';').map(s => s.trim());
                 Array.from(targetSelect.options).forEach(opt => {
-                    opt.selected = config.target_columns.includes(opt.value);
+                    opt.selected = targets.includes(opt.value);
                 });
             }
             if (config.id_column) {
@@ -186,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } catch (e) {
-            console.error('Error loading config', e);
+            console.error('Error restoring config', e);
         }
     }
 
@@ -200,10 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) { console.error(e); }
     }
-
-    // Attach listeners
-    form.addEventListener('change', saveConfig);
-    // Also save after successful upload (hooked below)
 
     // --- Chart.js Setup ---
     function initChart() {
@@ -279,14 +263,49 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     stopBtn.addEventListener('click', async () => {
-        if (!isTraining) return;
+        // Check if we're viewing the active run (not just if isTraining, since we might load an active run from DB)
+        if (!activeRunId || selectedRunId !== activeRunId) return;
+
         try {
             await fetch('/stop', { method: 'POST' });
             appendLog('Stopping training...', 'warning');
             stopBtn.disabled = true;
             stopBtn.textContent = 'Stopping...';
+
+            // Update UI state
+            isTraining = false;
+
+            // Refresh runs to get updated status
+            setTimeout(async () => {
+                await fetchRuns();
+                // Re-select to refresh the view
+                if (selectedRunId === activeRunId) {
+                    selectRun(selectedRunId);
+                }
+            }, 1000);
         } catch (e) {
             console.error(e);
+        }
+    });
+
+    deleteBtn.addEventListener('click', async () => {
+        if (!selectedRunId) return;
+        if (!confirm('Are you sure you want to delete this run? This action cannot be undone.')) return;
+
+        try {
+            const resp = await fetch(`/runs/${selectedRunId}`, { method: 'DELETE' });
+            if (resp.ok) {
+                // Remove from sidebar
+                await fetchRuns();
+                // Select active run or new training
+                selectRun(activeRunId);
+            } else {
+                const data = await resp.json();
+                alert(`Error deleting run: ${data.detail}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to delete run');
         }
     });
 
@@ -398,33 +417,32 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateSummary() {
         const trainInfo = document.getElementById('train_file_info').textContent;
         const validInfo = document.getElementById('valid_file_info').textContent;
-        const savedConfig = localStorage.getItem('vespatune_config') ? JSON.parse(localStorage.getItem('vespatune_config')) : {};
 
-        // Use form values if populated, otherwise fallback to saved config
-        const trainVal = trainInfo !== 'Click to upload' ? trainInfo : (document.getElementById('train_filename').value || savedConfig.train_filename || '--');
-        const validVal = validInfo !== 'Click to upload' ? validInfo : (document.getElementById('valid_filename').value || savedConfig.valid_filename || '--');
+        // Use form values (which should be restored by now)
+        const trainVal = trainInfo !== 'Click to upload' ? trainInfo : (document.getElementById('train_filename').value || '--');
+        const validVal = validInfo !== 'Click to upload' ? validInfo : (document.getElementById('valid_filename').value || '--');
 
         sumTrainFile.textContent = trainVal;
         sumValidFile.textContent = validVal;
 
         let targets = Array.from(targetSelect.selectedOptions).map(o => o.value).join(', ');
-        if (!targets && savedConfig.target_columns) {
-            targets = Array.isArray(savedConfig.target_columns) ? savedConfig.target_columns.join(', ') : savedConfig.target_columns;
-        }
         sumTarget.textContent = targets || 'None';
 
         // Handle ID column
         let idVal = document.getElementById('id_column').value;
-        if (!idVal && savedConfig.id_column) {
-            idVal = savedConfig.id_column;
-        }
         sumId.textContent = idVal || 'None';
 
-        const modelType = document.getElementById('model_type').value || savedConfig.model_type || '--';
-        const taskType = document.getElementById('task').value || savedConfig.task || '--';
+        const modelType = document.getElementById('model_type').value || '--';
+        const taskType = document.getElementById('task').value || '--';
         sumModel.textContent = `${modelType} (${taskType})`;
 
-        sumOutput.textContent = document.getElementById('output_dir').value || savedConfig.output_dir || '--';
+        sumProject.textContent = document.getElementById('project_name').value || '--';
+
+        const numTrials = document.getElementById('num_trials').value || '--';
+        sumTrials.textContent = numTrials;
+
+        const timeLimit = document.getElementById('time_limit').value || '--';
+        sumTime.textContent = timeLimit ? `${timeLimit}s` : '--';
     }
 
     function resetState() {
@@ -478,18 +496,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addTrial(data) {
+        // Check if trial already exists (deduplication)
+        const existingIndex = trials.findIndex(t => t.number === data.number);
+        if (existingIndex !== -1) {
+            // Trial already exists, skip
+            return;
+        }
+
         // Store all metrics
         const trialData = {
             number: data.number,
             value: data.value,
             params: data.params,
-            metrics: data.user_attrs || {},
+            metrics: data.metrics || data.user_attrs || {},  // Handle both formats
             time: new Date()
         };
 
         // Add user_attrs keys to available metrics
-        if (data.user_attrs) {
-            Object.keys(data.user_attrs).forEach(k => availableMetrics.add(k));
+        if (trialData.metrics) {
+            Object.keys(trialData.metrics).forEach(k => availableMetrics.add(k));
             updateMetricDropdown();
         }
 
@@ -499,7 +524,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Global Best
         if (bestValue === null || data.value < bestValue) {
             bestValue = data.value;
-            bestParams.textContent = JSON.stringify(data.best_params, null, 2);
+            // bestParams.textContent = JSON.stringify(data.best_params, null, 2); // This might not be present in trial object
+            if (data.best_params) bestParams.textContent = JSON.stringify(data.best_params, null, 2);
             bestScore.textContent = bestValue.toFixed(6);
         }
 
@@ -609,75 +635,190 @@ document.addEventListener('DOMContentLoaded', () => {
         logsDiv.innerHTML = '<div class="log-line info">Waiting for training...</div>';
     }
 
-    // --- Load Past Study ---
-    loadStudyBtn.addEventListener('click', loadStudy);
 
-    async function loadStudy() {
-        const dbPath = dbPathInput.value.trim();
-        if (!dbPath) {
-            appendLog('Please enter a database path', 'error');
-            return;
-        }
-        await fetchAndDisplayStudy(dbPath);
+
+    // --- Sidebar & Run Management ---
+
+    async function fetchRuns() {
+        try {
+            const resp = await fetch('/runs');
+            const data = await resp.json();
+            runs = data.runs;
+            renderSidebar();
+        } catch (e) { console.error('Error fetching runs:', e); }
     }
 
-    async function fetchAndDisplayStudy(dbPath) {
-        try {
-            const resp = await fetch(`/study/vespatune?db_path=${encodeURIComponent(dbPath)}`);
-            const data = await resp.json();
+    function renderSidebar() {
+        runListContainer.innerHTML = '';
+        runs.forEach(run => {
+            const item = document.createElement('div');
+            item.className = `run-item ${selectedRunId === run.id ? 'active' : ''}`;
+            item.onclick = () => selectRun(run.id);
 
-            if (data.error) {
-                appendLog(`Error loading study: ${data.error}`, 'error');
-                return;
-            }
-
-            resetState();
-
-            // Add all trials
-            data.trials.forEach(t => {
-                const trialObj = {
-                    number: t.number,
-                    value: t.value,
-                    params: t.params,
-                    user_attrs: t.user_attrs,
-                    best_params: data.best_params // This is global best, but effectively same for parsing
-                };
-                addTrial(trialObj);
+            // Date formatting
+            const date = new Date(run.created_at).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
             });
 
-            appendLog(`Loaded study with ${data.trials.length} trials`, 'info');
+            item.innerHTML = `
+                <div class="run-status-icon ${run.status}"></div>
+                <div class="run-info">
+                    <span class="run-id">Run #${run.id}</span>
+                    <span class="run-date">${date}</span>
+                </div>
+            `;
+            runListContainer.appendChild(item);
+        });
+    }
 
-        } catch (e) {
-            appendLog(`Error: ${e}`, 'error');
+    async function selectRun(runId) {
+        selectedRunId = runId;
+        renderSidebar(); // Update active class
+
+        if (runId === null) {
+            // New Training Mode
+            form.style.display = 'block';
+            summaryDiv.style.display = 'none';
+            resetState();
+            setStatus('Ready', '');
+
+            if (activeRunId) {
+                setStatus(`Run #${activeRunId} is running in background`, 'warning');
+            }
+
+            // Disconnect WS if we are not viewing the active run
+            // Actually, we might want to keep it connected but ignore messages?
+            // Or just close it.
+            if (ws) ws.close();
+            stopBtn.disabled = true;
+        } else {
+            // Viewing a Run
+            await loadRunDetails(runId);
         }
+    }
+
+    async function loadRunDetails(runId) {
+        try {
+            // 1. Get Details
+            const resp = await fetch(`/runs/${runId}`);
+            if (!resp.ok) throw new Error('Run not found');
+            const run = await resp.json();
+
+            // 2. Hydrate Form/Summary
+            await restoreFormFromConfig(run.config);
+            updateSummary();
+
+            // Switch to Summary View
+            form.style.display = 'none';
+            summaryDiv.style.display = 'block';
+
+            // 3. Status & Interactivity
+            const isThisActive = (run.status === 'running' || run.status === 'pending');
+
+            if (isThisActive && run.id === activeRunId) {
+                // Active run - show stop, hide delete
+                stopBtn.style.display = 'inline-block';
+                stopBtn.disabled = false;
+                stopBtn.textContent = 'Stop Training';
+                deleteBtn.style.display = 'none';
+
+                setStatus('Training in progress...', 'running');
+                connectWebSocket();
+            } else {
+                // Historical run - hide stop, show delete
+                stopBtn.style.display = 'none';
+                deleteBtn.style.display = 'inline-block';
+
+                setStatus(`Run #${runId}: ${run.status}`, run.status);
+                if (ws && ws.readyState === WebSocket.OPEN && selectedRunId !== activeRunId) {
+                    ws.close();
+                }
+            }
+
+            // 4. Load Trials & Chart
+            await fetchAndDisplayRunTrials(runId);
+
+        } catch (e) { console.error(e); }
+    }
+
+    async function fetchAndDisplayRunTrials(runId) {
+        resetState();
+        try {
+            const resp = await fetch(`/runs/${runId}/trials`);
+            const data = await resp.json();
+
+            if (data.trials) {
+                // Collect metrics first
+                data.trials.forEach(t => {
+                    if (t.user_attrs) {
+                        Object.keys(t.user_attrs).forEach(k => {
+                            if (!k.startsWith('mlflow')) availableMetrics.add(k);
+                        });
+                    }
+                });
+                updateMetricDropdown();
+
+                data.trials.forEach(t => {
+                    const trialObj = {
+                        number: t.number,
+                        value: t.value,
+                        params: t.params,
+                        metrics: t.user_attrs || {},
+                        best_params: null
+                    };
+                    // Manually inject 'metrics' key if not present in original addTrial logic
+                    // My previous addTrial logic expected `data` from WS which had `value`, `params` etc.
+                    // My `addTrial` wrapper inside `fetchAndDisplayStudy` did mapping.
+                    // I should reuse `addTrial` but it pushes to `trials` global list which is fine.
+                    // But `addTrial` calls `updateChart` on every push. That's slow for bulk load.
+                    // Better to just push to trials and update chart once?
+                    // For now reusing `addTrial` is simpler code-wise even if slower.
+
+                    // Actually `fetchAndDisplayStudy` logic was good. Let's copy it.
+                    addTrial(trialObj);
+                });
+
+                // Best Value update (addTrial handles it incrementally, but we can double check)
+                if (data.best_value !== undefined) {
+                    bestValue = data.best_value;
+                    bestScore.textContent = bestValue ? bestValue.toFixed(6) : '--';
+                }
+                if (data.best_params) {
+                    bestParams.textContent = JSON.stringify(data.best_params, null, 2);
+                }
+            }
+        } catch (e) { console.error(e); }
     }
 
     // --- Auto Load Current Study ---
     async function checkCurrentStudy() {
+        // First, fetch list of runs
+        await fetchRuns();
+
+        // Check for ACTIVE run
         try {
-            const resp = await fetch('/current_study');
+            const resp = await fetch('/active_run_id');
             const data = await resp.json();
 
-            if (data.db_path) {
-                dbPathInput.value = data.db_path;
-                // Auto-load existing results
-                await fetchAndDisplayStudy(data.db_path);
-            }
-
-            if (data.is_training) {
-                setTrainingState(true);
-                setStatus('Training in progress (Resumed)', 'running');
-                connectWebSocket();
+            if (data.active_run_id) {
+                activeRunId = data.active_run_id;
+                // If we have an active run, select it by default
+                selectRun(activeRunId);
+            } else {
+                activeRunId = null;
+                // If no active run, default to "New Training"
+                selectRun(null);
             }
         } catch (e) {
-            console.error(e);
+            console.error('Error checking status:', e);
+            selectRun(null);
         }
     }
 
     // Initialize
     initChart();
-    connectWebSocket(); // Connect immediately to catch logs
+    // connectWebSocket(); // Don't auto connect globally anymore, selectRun handles it
     checkCurrentStudy();
-    loadConfig(); // Restore config
-    setStatus('Ready', '');
+
+    newTrainingBtn.addEventListener('click', () => selectRun(null));
 });

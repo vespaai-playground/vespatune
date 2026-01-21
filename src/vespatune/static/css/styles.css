@@ -696,3 +696,143 @@ button:disabled {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Layout Refactor for Sidebar */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.app-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background-color: var(--card-bg);
+    /* Match card bg */
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.sidebar-content h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.run-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.run-item {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background-color: transparent;
+    border: 1px solid transparent;
+    /* var(--border-color) */
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.run-item:hover {
+    background-color: var(--bg-darker);
+    border-color: var(--border-color);
+}
+
+.run-item.active {
+    border-color: var(--primary-color);
+    background-color: rgba(99, 102, 241, 0.1);
+    /* Primary with opacity */
+}
+
+.run-status-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.run-status-icon.running {
+    background-color: var(--warning-color);
+    box-shadow: 0 0 8px var(--warning-color);
+}
+
+.run-status-icon.completed {
+    background-color: var(--success-color);
+}
+
+.run-status-icon.stopped {
+    background-color: var(--text-muted);
+}
+
+.run-status-icon.error {
+    background-color: var(--danger-color);
+}
+
+.run-status-icon.pending {
+    background-color: var(--text-muted);
+    border: 1px solid var(--text-muted);
+    background: transparent;
+}
+
+.run-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    font-size: 0.9rem;
+    overflow: hidden;
+}
+
+.run-info .run-id {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.run-info .run-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Main Grid Override to fit in flex */
+.main-grid {
+    flex: 1;
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: minmax(350px, 1fr) 1.5fr;
+    /* Config | Monitor */
+    gap: 1.5rem;
+    overflow-y: auto;
+}
+
+.btn-primary.full-width {
+    width: 100%;
+    justify-content: center;
+}

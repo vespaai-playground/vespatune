@@ -5,6 +5,11 @@ import json
 import asyncio
 import pandas as pd
 import optuna
+import tempfile
+import sys
+import subprocess
+import signal
+import time
 
 from fastapi import (
     FastAPI,
@@ -14,6 +19,7 @@ from fastapi import (
     File,
     WebSocket,
     WebSocketDisconnect,
+    HTTPException,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,19 +30,71 @@ from .predict import VespaTuneONNXPredict
 from .core import VespaTune
 from .models import list_models
 from .enums import TaskType
+from .db import init_db, create_run, update_run_status, get_run, get_active_run, get_all_runs, delete_run
 
+# Helper: Check if process is alive
+def is_process_alive(pid):
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)  # Signal 0 checks if process exists
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+
+# Helper: Check if final model exists for a run
+def has_final_model(output_dir):
+    if not output_dir or not os.path.exists(output_dir):
+        return False
+    final_model_path = os.path.join(output_dir, "vtune_model.final")
+    return os.path.exists(final_model_path)
+
+# Startup: Recover stale runs
+def recover_stale_runs():
+    runs = get_all_runs()
+    for run in runs:
+        if run['status'] in ['running', 'pending']:
+            pid = run.get('pid')
+            run_id = run['id']
+            
+            # Check if process is still alive
+            if is_process_alive(pid):
+                continue  # Still running, leave it
+            
+            # Process is dead - check if it completed
+            if has_final_model(run['output_dir']):
+                update_run_status(run_id, 'completed')
+                print(f"Run {run_id}: Marked as completed (final model exists)")
+            else:
+                update_run_status(run_id, 'error', error='Process terminated unexpectedly')
+                print(f"Run {run_id}: Marked as error (no final model)")
+
+# Initialize DB on startup
+init_db()
+recover_stale_runs()
 
 app = FastAPI()
 
+# Graceful shutdown: Stop all active runs
+def cleanup_active_runs():
+    print("Shutting down: Stopping all active runs...")
+    runs = get_all_runs()
+    for run in runs:
+        if run['status'] in ['running', 'pending'] and run.get('pid'):
+            try:
+                os.kill(run['pid'], signal.SIGTERM)
+                update_run_status(run['id'], 'stopped')
+                print(f"Stopped run {run['id']}")
+            except (ProcessLookupError, OSError):
+                print(f"Run {run['id']} process already dead")
 
-# Global state
-ACTIVE_STUDY_PATH = None
-STOP_TRAINING = False
-IS_TRAINING = False
+# Register signal handlers
+def signal_handler(signum, frame):
+    cleanup_active_runs()
+    sys.exit(0)
 
-# Create uploads directory if it doesn't exist
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Mount static files
 app.mount(
@@ -82,108 +140,118 @@ manager = ConnectionManager()
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    
+    # Start a background task to stream logs and monitor trials if a run is active
+    active_run = get_active_run()
+    log_task = None
+    trial_task = None
+    if active_run and active_run['status'] == 'running':
+         log_task = asyncio.create_task(stream_logs(active_run['output_dir'], manager))
+         trial_task = asyncio.create_task(monitor_trials(active_run['db_path'], manager))
+
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        if log_task: log_task.cancel()
+        if trial_task: trial_task.cancel()
 
 
-# --- Optuna Callback ---
-def optuna_callback(study, trial):
-    if trial.state == optuna.trial.TrialState.COMPLETE:
-        msg = {
-            "type": "trial_complete",
-            "number": trial.number,
-            "value": trial.value,
-            "params": trial.params,
-            "user_attrs": trial.user_attrs,
-            "best_value": study.best_value,
-            "best_params": study.best_params,
-        }
-        # We need a running event loop to send async messages from a sync callback
+async def stream_logs(output_dir: str, manager: ConnectionManager):
+    log_file = os.path.join(output_dir, "run.log")
+    
+    # Wait for file to exist
+    while not os.path.exists(log_file):
+        await asyncio.sleep(1)
+        # Check if run is still alive? (For simplified logic, just wait a bit)
+    
+    # Tail the file
+    with open(log_file, "r") as f:
+        # Go to end
+        f.seek(0, os.SEEK_END)
+        while True:
+            line = f.readline()
+            if not line:
+                await asyncio.sleep(0.5)
+                continue
+            
+            # Simple parsing or just send raw line
+            await manager.broadcast({"type": "info", "message": line.strip()})
+
+
+async def monitor_trials(db_path: str, manager: ConnectionManager):
+    storage = f"sqlite:///{db_path}"
+    last_trial_count = 0
+    study_name = "vespatune" # Assuming default name from core.py
+    
+    while True:
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Check if DB exists yet
+            if not os.path.exists(db_path):
+                await asyncio.sleep(2)
+                continue
 
-        loop.create_task(manager.broadcast(msg))
+            # Load study purely to check trials
+            # Note: optimistically loading study. 
+            # In production, we might want a lighter query or share the same storage obj
+            study = optuna.load_study(study_name=study_name, storage=storage)
+            trials = study.trials
+            
+            # Filter for completed trials
+            completed_trials = [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
+            current_count = len(completed_trials)
+            
+            if current_count > last_trial_count:
+                # Broadcast new trials
+                # We sort by number to ensure order
+                completed_trials.sort(key=lambda t: t.number)
+                
+                # Send only the new ones
+                for i in range(last_trial_count, current_count):
+                    t = completed_trials[i]
+                    msg = {
+                        "type": "trial_complete",
+                        "number": t.number,
+                        "value": t.value,
+                        "params": t.params,
+                        "user_attrs": t.user_attrs,
+                        "best_value": study.best_value,
+                        "best_params": study.best_params,
+                    }
+                    await manager.broadcast(msg)
+                
+                last_trial_count = current_count
+            
+            await asyncio.sleep(2)
+            
+        except Exception as e:
+            # Logic to handle race conditions or DB locks
+            # print(f"Monitor error: {e}") 
+            await asyncio.sleep(2)
 
 
 class TrainRequest(BaseModel):
+    project_name: str
     train_filename: str
     valid_filename: str
-    output_dir: str
     target_columns: str
     id_column: str = "id"
     task: str = "classification"
     model_type: str = "xgboost"
     num_trials: int = 100
     time_limit: int = 3600
-
-
-def run_training(config: TrainRequest):
-    # Notify start
-    asyncio.run(
-        manager.broadcast({"type": "status", "message": "Initializing training..."})
-    )
-
-    targets = [x.strip() for x in config.target_columns.split(";")]
-    try:
-        vt = VespaTune(
-            train_filename=config.train_filename,
-            valid_filename=config.valid_filename,
-            output=config.output_dir,
-            task=config.task,
-            idx=config.id_column,
-            targets=targets,
-            model_type=config.model_type,
-            num_trials=config.num_trials,
-            time_limit=config.time_limit,
-        )
-        # Notify processing data
-        asyncio.run(
-            manager.broadcast({"type": "status", "message": "Processing data..."})
-        )
-
-        # Reset stop signal
-        global STOP_TRAINING, ACTIVE_STUDY_PATH, IS_TRAINING
-        STOP_TRAINING = False
-        IS_TRAINING = True
-        ACTIVE_STUDY_PATH = f"{config.output_dir}/params.db"
-
-        # Callbacks
-        def optuna_check_stop(study, trial):
-            if STOP_TRAINING:
-                study.stop()
-                raise optuna.exceptions.TrialPruned("Training cancelled by user")
-
-        def simple_check_stop():
-            if STOP_TRAINING:
-                raise optuna.exceptions.TrialPruned("Training cancelled by user")
-
-        vt.train(callbacks=[optuna_callback, optuna_check_stop], check_stop=simple_check_stop)
-
-        # Notify complete
-        asyncio.run(
-            manager.broadcast(
-                {"type": "status", "message": "Training completed successfully!"}
-            )
-        )
-
-    except optuna.exceptions.TrialPruned as e:
-         asyncio.run(
-            manager.broadcast({"type": "status", "message": "Training cancelled"})
-        )
-         asyncio.run(manager.broadcast({"type": "info", "message": str(e)}))
-
-    except Exception as e:
-        asyncio.run(manager.broadcast({"type": "error", "message": str(e)}))
-
-    finally:
-        IS_TRAINING = False
-        asyncio.run(manager.broadcast({"type": "training_finished"}))
+    
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate_project_name
+    
+    @classmethod
+    def validate_project_name(cls, v):
+        import re
+        if not re.match(r'^[a-zA-Z0-9-]+$', v.get('project_name', '')):
+            raise ValueError('Project name must be alphanumeric with hyphens only')
+        return v
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -200,7 +268,10 @@ async def read_root(request: Request):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    file_location = os.path.join(UPLOAD_DIR, file.filename)
+    # Use temp directory for secure uploads
+    temp_dir = tempfile.mkdtemp(prefix="vespatune_uploads_")
+    file_location = os.path.join(temp_dir, file.filename)
+    
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -224,15 +295,38 @@ def get_columns(path: str):
 
 
 @app.get("/current_study")
-def get_current_study():
-    return {"db_path": ACTIVE_STUDY_PATH, "is_training": IS_TRAINING}
+def get_current_study_endpoint():
+    run = get_active_run()
+    if run:
+        config = json.loads(run['config']) if run['config'] else {}
+        return {
+            "db_path": run['db_path'],
+            "is_training": run['status'] == 'running',
+            "run_id": run['id'],
+            "config": config
+        }
+    return {"db_path": None, "is_training": False, "config": None}
 
 
 @app.post("/stop")
 def stop_training():
-    global STOP_TRAINING
-    STOP_TRAINING = True
-    return {"message": "Stopping training..."}
+    run = get_active_run()
+    if not run or run['status'] != 'running':
+        return {"message": "No active training run"}
+    
+    pid = run['pid']
+    if pid:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            update_run_status(run['id'], "stopped")
+            return {"message": "Stop signal sent to process"}
+        except ProcessLookupError:
+            update_run_status(run['id'], "error", error="Process not found")
+            return {"message": "Process not found, status updated"}
+        except Exception as e:
+            return {"error": str(e)}
+    
+    return {"message": "No PID associated with run"}
 
 
 @app.get("/study/{study_name}")
@@ -274,12 +368,179 @@ def get_meta():
     if schema:
         return schema.model_json_schema()
     return {}
+@app.get("/runs")
+def list_runs():
+    runs = get_all_runs()
+    # Parse config to extract model_type for summary if needed, but doing it in frontend is also fine.
+    # For efficiency we might want to do it here if list is long, but for now sending full config is okay-ish.
+    # Let's just parse it to be nice.
+    results = []
+    for r in runs:
+        conf = json.loads(r['config']) if r['config'] else {}
+        results.append({
+            "id": r['id'],
+            "status": r['status'],
+            "created_at": r['created_at'],
+            "model_type": conf.get('model_type', 'unknown'),
+            "task": conf.get('task', 'unknown'),
+            "output_dir": r['output_dir']
+        })
+    return {"runs": results}
+
+@app.get("/runs/{run_id}")
+def get_run_details(run_id: int):
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    config = json.loads(run['config']) if run['config'] else {}
+    return {
+        "id": run['id'],
+        "status": run['status'],
+        "created_at": run['created_at'],
+        "output_dir": run['output_dir'],
+        "db_path": run['db_path'],
+        "config": config,
+        "pid": run['pid']
+    }
+
+@app.get("/runs/{run_id}/trials")
+def get_run_trials(run_id: int):
+    run = get_run(run_id)
+    if not run or not run['db_path']:
+        return {"trials": []}
+    
+    db_path = run['db_path']
+    if not os.path.exists(db_path):
+         return {"trials": []}
+
+    storage = f"sqlite:///{db_path}"
+    try:
+        study = optuna.load_study(study_name="vespatune", storage=storage)
+        trials = []
+        for t in study.trials:
+            if t.state == optuna.trial.TrialState.COMPLETE:
+                 trials.append({
+                    "number": t.number,
+                    "value": t.value,
+                    "params": t.params,
+                    "user_attrs": t.user_attrs,
+                    "state": t.state.name
+                })
+        # Sort by number
+        trials.sort(key=lambda x: x['number'])
+        
+        return {
+            "trials": trials,
+            "best_value": study.best_value if len(trials) > 0 else None,
+            "best_params": study.best_params if len(trials) > 0 else None
+        }
+    except Exception as e:
+        print(f"Error loading study for run {run_id}: {e}")
+        return {"trials": []}
+
+@app.get("/active_run_id")
+def get_active_run_id_endpoint():
+    run = get_active_run()
+    # get_active_run returns *last* run if no active one found in my previous logic, 
+    # BUT wait, the previous logic was:
+    # "SELECT * FROM runs WHERE status IN ('pending', 'running') ... "
+    # if found return it.
+    # ELSE return last run.
+    
+    # This might be confusing for "active_run_id". 
+    # We strictly want the RUNNING/PENDING one.
+    # I should check the status.
+    
+    if run and run['status'] in ['running', 'pending']:
+        return {"active_run_id": run['id']}
+    return {"active_run_id": None}
+
+
+@app.delete("/runs/{run_id}")
+def delete_run_endpoint(run_id: int):
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Prevent deleting active runs
+    if run['status'] in ['running', 'pending']:
+         raise HTTPException(status_code=400, detail="Cannot delete a running or pending job. Stop it first.")
+
+    # Cleanup Files
+    try:
+        if run['output_dir'] and os.path.exists(run['output_dir']):
+            shutil.rmtree(run['output_dir'])
+        
+        # db_path might be inside output_dir, but if it's separate check it
+        if run['db_path'] and os.path.exists(run['db_path']):
+            # Verify it's a file before removing, just in case
+            if os.path.isfile(run['db_path']):
+                os.remove(run['db_path'])
+    except Exception as e:
+        print(f"Error cleaning up files for run {run_id}: {e}")
+        # We continue to delete from DB even if file cleanup fails partially
+        
+    delete_run(run_id)
+    return {"status": "deleted"}
 
 
 @app.post("/train")
-async def train(config: TrainRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_training, config)
-    return {"message": "Training started", "config": config}
+async def train(config: TrainRequest):
+    # Validate project name
+    import re
+    if not re.match(r'^[a-zA-Z0-9-]+$', config.project_name):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Project name must be alphanumeric with hyphens only"}
+        )
+    
+    # Check if existing run is active
+    active = get_active_run()
+    if active and active['status'] == 'running':
+        return JSONResponse(status_code=400, content={"detail": "Training already in progress"})
+
+    # Create output directory in ~/.vespatune/
+    base_dir = os.path.expanduser("~/.vespatune")
+    os.makedirs(base_dir, exist_ok=True)
+    output_dir = os.path.join(base_dir, config.project_name)
+    
+    if os.path.exists(output_dir):
+        # Append timestamp to make unique
+        import time
+        timestamp = int(time.time())
+        output_dir = os.path.join(base_dir, f"{config.project_name}-{timestamp}")
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    db_path = f"{output_dir}/params.db"
+    
+    # Create DB entry
+    run_id = create_run(config.dict(), config.project_name, output_dir, db_path)
+    
+    # Prepare config for worker (add generated output_dir)
+    worker_config = config.dict()
+    worker_config['output_dir'] = output_dir
+    
+    # Spawn worker process
+    # We use python -m vespatune.worker
+    cmd = [
+        sys.executable,
+        "-m",
+        "vespatune.worker",
+        "--run-id", str(run_id),
+        "--config", json.dumps(worker_config)
+    ]
+    
+    try:
+        process = subprocess.Popen(cmd, start_new_session=True)
+        # Update DB with PID
+        update_run_status(run_id, "running", pid=process.pid)
+        
+        return {"message": "Training started", "run_id": run_id, "pid": process.pid}
+    except Exception as e:
+        update_run_status(run_id, "error", error=str(e))
+        return JSONResponse(status_code=500, content={"detail": f"Failed to spawn worker: {e}"})
 
 
 @app.post("/predict")
