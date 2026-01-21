@@ -19,31 +19,36 @@ class LightGBMModel(BaseModel):
 
     def get_params(self, trial, model_config) -> Dict[str, Any]:
         """Get LightGBM hyperparameters for Optuna trial."""
+        # Boosting type must be selected first as it affects other params
+        boosting_type = trial.suggest_categorical("boosting_type", ["gbdt", "dart", "goss"])
+
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
             "n_estimators": trial.suggest_int("n_estimators", 500, 10000),
-            "early_stopping_rounds": trial.suggest_int("early_stopping_rounds", 50, 300),
             "num_leaves": trial.suggest_int("num_leaves", 20, 300),
             "max_depth": trial.suggest_int("max_depth", 3, 15),
             "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
             "min_child_weight": trial.suggest_float("min_child_weight", 1e-3, 10.0, log=True),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "subsample_freq": trial.suggest_int("subsample_freq", 1, 10),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.3, 1.0),
             "random_state": self.random_state,
             "verbosity": -1,
+            "boosting_type": boosting_type,
         }
 
-        # Boosting type
-        boosting_type = trial.suggest_categorical("boosting_type", ["gbdt", "dart", "goss"])
-        params["boosting_type"] = boosting_type
+        # Early stopping not available in dart mode
+        if boosting_type != "dart":
+            params["early_stopping_rounds"] = trial.suggest_int("early_stopping_rounds", 50, 300)
 
-        # GOSS-specific parameters
+        # GOSS-specific parameters (GOSS cannot use bagging/subsample)
         if boosting_type == "goss":
             params["top_rate"] = trial.suggest_float("top_rate", 0.1, 0.5)
             params["other_rate"] = trial.suggest_float("other_rate", 0.01, 0.2)
+        else:
+            # Bagging parameters only for gbdt and dart
+            params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
+            params["subsample_freq"] = trial.suggest_int("subsample_freq", 1, 10)
 
         # DART-specific parameters
         if boosting_type == "dart":
@@ -55,8 +60,10 @@ class LightGBMModel(BaseModel):
         if model_config.use_gpu:
             params["device"] = "gpu"
 
-        # Extra tree parameters
-        params["extra_trees"] = trial.suggest_categorical("extra_trees", [True, False])
+        # Extra tree parameters (only for gbdt)
+        if boosting_type == "gbdt":
+            params["extra_trees"] = trial.suggest_categorical("extra_trees", [True, False])
+
         params["path_smooth"] = trial.suggest_float("path_smooth", 0.0, 1.0)
 
         # Feature fraction parameters
@@ -113,14 +120,15 @@ class LightGBMModel(BaseModel):
         """Train LightGBM model."""
         import lightgbm as lgb
 
-        # Extract early stopping rounds
-        early_stopping_rounds = params.pop("early_stopping_rounds", 100)
+        # Extract early stopping rounds (not available in dart mode)
+        early_stopping_rounds = params.pop("early_stopping_rounds", None)
 
-        # Extract callbacks params if present
-        callbacks = [
-            lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False),
-            lgb.log_evaluation(period=0),
-        ]
+        # Build callbacks - early stopping only if not dart mode
+        callbacks = [lgb.log_evaluation(period=0)]
+        if early_stopping_rounds is not None:
+            callbacks.append(
+                lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)
+            )
 
         # Create model based on problem type
         if self.problem_type in ("binary_classification", "multi_class_classification"):
@@ -140,7 +148,7 @@ class LightGBMModel(BaseModel):
             categorical_feature=cat_feature,
         )
 
-        self.best_iteration = self.model.best_iteration_
+        self.best_iteration = getattr(self.model, "best_iteration_", self.model.n_estimators)
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Make predictions."""

@@ -19,26 +19,26 @@ class CatBoostModel(BaseModel):
 
     def get_params(self, trial, model_config) -> Dict[str, Any]:
         """Get CatBoost hyperparameters for Optuna trial."""
+        # Bootstrap type must be selected first as it affects other params
+        bootstrap_type = trial.suggest_categorical("bootstrap_type", ["Bayesian", "Bernoulli", "MVS"])
+
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
             "iterations": trial.suggest_int("iterations", 500, 10000),
             "early_stopping_rounds": trial.suggest_int("early_stopping_rounds", 50, 300),
             "depth": trial.suggest_int("depth", 4, 10),
             "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-8, 10.0, log=True),
-            "bagging_temperature": trial.suggest_float("bagging_temperature", 0.0, 1.0),
             "random_strength": trial.suggest_float("random_strength", 1e-8, 10.0, log=True),
             "border_count": trial.suggest_int("border_count", 32, 255),
             "random_state": self.random_state,
             "verbose": False,
+            "bootstrap_type": bootstrap_type,
         }
 
-        # Bootstrap type
-        bootstrap_type = trial.suggest_categorical("bootstrap_type", ["Bayesian", "Bernoulli", "MVS"])
-        params["bootstrap_type"] = bootstrap_type
-
-        if bootstrap_type == "Bernoulli":
-            params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
-        elif bootstrap_type == "MVS":
+        # Bootstrap type-specific parameters
+        if bootstrap_type == "Bayesian":
+            params["bagging_temperature"] = trial.suggest_float("bagging_temperature", 0.0, 10.0)
+        elif bootstrap_type in ("Bernoulli", "MVS"):
             params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
 
         # Grow policy

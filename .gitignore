@@ -12,6 +12,7 @@ test_data/
 spaceship-titanic/
 catboost_info/
 .claude
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

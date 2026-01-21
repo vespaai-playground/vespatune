@@ -80,7 +80,8 @@ class XGBoostModel(BaseModel):
             params["max_delta_step"] = trial.suggest_float("max_delta_step", 0.0, 10.0)
 
         elif self.problem_type == "multi_class_classification":
-            params["max_depth"] = trial.suggest_int("max_depth", 4, 15)
+            # No additional params needed - max_depth already set in base params
+            pass
 
         elif self.problem_type == "multi_label_classification":
             params["scale_pos_weight"] = trial.suggest_float("scale_pos_weight", 0.1, 10.0, log=True)

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VespaTune</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>VespaTune</h1>
+            <div class="status-badge" id="connection-status">Disconnected</div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-grid">
+            <!-- Left Panel: Configuration -->
+            <section class="panel config-panel">
+                <h2>Configuration</h2>
+
+                <form id="train-form">
+                    <!-- Data Upload Section -->
+                    <div class="section-group">
+                        <h3>Data</h3>
+                        <div class="upload-row">
+                            <div class="upload-box" id="train-upload">
+                                <input type="file" id="train_file" accept=".csv" hidden>
+                                <span class="upload-label">Train CSV</span>
+                                <span class="upload-status" id="train_file_info">Click to upload</span>
+                            </div>
+                            <div class="upload-box" id="valid-upload">
+                                <input type="file" id="valid_file" accept=".csv" hidden>
+                                <span class="upload-label">Valid CSV</span>
+                                <span class="upload-status" id="valid_file_info">Click to upload</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="train_filename" name="train_filename" required>
+                        <input type="hidden" id="valid_filename" name="valid_filename" required>
+                    </div>
+
+                    <!-- Column Selection -->
+                    <div class="section-group">
+                        <h3>Columns</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="target_columns">Target</label>
+                                <select id="target_columns" name="target_columns" required multiple>
+                                    <option value="" disabled>Upload CSV first</option>
+                                </select>
+                                <small>Hold Ctrl/Cmd for multiple</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="id_column">ID Column</label>
+                                <select id="id_column" name="id_column">
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Model Settings -->
+                    <div class="section-group">
+                        <h3>Model</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="task">Task</label>
+                                <select id="task" name="task">
+                                    {% for task in tasks %}
+                                    <option value="{{ task }}">{{ task }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="model_type">Model</label>
+                                <select id="model_type" name="model_type">
+                                    {% for model in models %}
+                                    <option value="{{ model }}">{{ model }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="num_trials">Trials</label>
+                                <input type="number" id="num_trials" name="num_trials" value="10" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="time_limit">Time (sec)</label>
+                                <input type="number" id="time_limit" name="time_limit" value="3600" min="60">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output -->
+                    <div class="section-group">
+                        <h3>Output</h3>
+                        <div class="form-group">
+                            <label for="output_dir">Directory</label>
+                            <input type="text" id="output_dir" name="output_dir" required placeholder="/path/to/output">
+                        </div>
+                    </div>
+
+                    <button type="submit" id="start-btn">Start Training</button>
+                </form>
+
+                <!-- Load Past Study -->
+                <div class="section-group" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                    <h3>Load Past Study</h3>
+                    <div class="form-group">
+                        <label for="db_path">Database Path</label>
+                        <input type="text" id="db_path" placeholder="/path/to/params.db">
+                    </div>
+                    <button type="button" id="load-study-btn" class="btn-secondary">Load Study</button>
+                </div>
+            </section>
+
+            <!-- Right Panel: Training Monitor & Results -->
+            <section class="panel monitor-panel">
+                <!-- Status Bar -->
+                <div class="status-bar">
+                    <span class="status-text" id="training-status">Ready</span>
+                    <span class="progress-info" id="progress-info"></span>
+                </div>
+
+                <!-- Live Metrics -->
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <span class="metric-label">Trials</span>
+                        <span class="metric-value" id="trial-count">0</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Best Score</span>
+                        <span class="metric-value" id="best-score">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Latest</span>
+                        <span class="metric-value" id="latest-score">--</span>
+                    </div>
+                </div>
+
+                <!-- Chart Area -->
+                <div class="chart-container">
+                    <h3>Optimization Progress</h3>
+                    <div class="chart-area" id="chart-area">
+                        <canvas id="optimization-chart"></canvas>
+                        <div class="chart-placeholder" id="chart-placeholder">
+                            Run training to see optimization progress
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Best Parameters -->
+                <div class="params-section">
+                    <h3>Best Parameters</h3>
+                    <pre id="best-params">No results yet</pre>
+                </div>
+
+                <!-- Trial History -->
+                <div class="trials-section">
+                    <h3>Trial History <span class="trial-count-badge" id="history-count">0</span></h3>
+                    <div class="trial-list" id="trial-list">
+                        <div class="trial-placeholder">Trials will appear here</div>
+                    </div>
+                </div>
+
+                <!-- Log Window -->
+                <div class="log-section">
+                    <h3>Logs</h3>
+                    <div class="log-window" id="ws-logs">
+                        <div class="log-line">Waiting for training to start...</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>
