@@ -11,7 +11,8 @@ from sklearn.utils.multiclass import type_of_target
 from .enums import ProblemType
 from .logger import logger
 from .schemas import ModelConfig
-from .utils import predict_model, reduce_memory_usage, train_final_model, train_model
+from .models import list_models
+from .utils import reduce_memory_usage, train_final_model, train_model
 
 
 @dataclass
@@ -32,6 +33,7 @@ class VespaTune:
     seed: Optional[int] = 42
     num_trials: Optional[int] = 1000
     time_limit: Optional[int] = None
+    model_type: Optional[str] = "xgboost"  # xgboost, lightgbm, or catboost
 
     def __post_init__(self):
         if os.path.exists(self.output):
@@ -48,6 +50,16 @@ class VespaTune:
         if self.idx is None:
             logger.warning("No id column specified. Will default to `id`.")
             self.idx = "id"
+
+        # Validate model type
+        available_models = list_models()
+        if self.model_type.lower() not in available_models:
+            raise ValueError(
+                f"Unknown model type: {self.model_type}. "
+                f"Available models: {', '.join(available_models)}"
+            )
+        self.model_type = self.model_type.lower()
+        logger.info(f"Model type: {self.model_type}")
 
     def _determine_problem_type(self, train_df):
         if self.task is not None:
@@ -185,6 +197,7 @@ class VespaTune:
             "seed": self.seed,
             "num_trials": self.num_trials,
             "time_limit": self.time_limit,
+            "model_type": self.model_type,
         }
 
         self.model_config = ModelConfig(**model_config)

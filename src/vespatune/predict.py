@@ -36,11 +36,11 @@ class VespaTunePredict:
         cat_features = self.model_config.categorical_features
         schema = {"PredictSchema": {}}
         for cf in cat_features:
-            schema["PredictSchema"][cf] = "str"
+            schema["PredictSchema"][cf] = (str, ...)
 
         for feat in self.model_config.features:
             if feat not in cat_features:
-                schema["PredictSchema"][feat] = 10.0
+                schema["PredictSchema"][feat] = (float, ...)
         return create_model("PredictSchema", **schema["PredictSchema"])
 
     def _predict_df(self, df):

@@ -19,3 +19,4 @@ class ModelConfig(BaseModel):
     categorical_features: List[str]
     num_trials: int
     time_limit: Optional[int] = None
+    model_type: str = "xgboost"  # xgboost, lightgbm, or catboost

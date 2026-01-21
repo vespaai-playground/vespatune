@@ -4,13 +4,14 @@ examples/.logs/
 examples/text_classification/.logs/
 *.bin
 input/
-models/
 outputs/
 datasets/
 examples/output/
 output/
 test_data/
 spaceship-titanic/
+catboost_info/
+.claude
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

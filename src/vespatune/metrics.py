@@ -60,9 +60,13 @@ class Metrics:
                     metrics[metric_name] = metric_func(y_true, y_pred)
             else:
                 if metric_name == "rmsle":
-                    temp_pred = copy.deepcopy(y_pred)
-                    temp_pred[temp_pred < 0] = 0
-                    metrics[metric_name] = metric_func(y_true, temp_pred)
+                    # rmsle requires both y_true and y_pred > -1
+                    if np.any(y_true <= -1):
+                        metrics[metric_name] = np.nan
+                    else:
+                        temp_pred = copy.deepcopy(y_pred)
+                        temp_pred[temp_pred < 0] = 0
+                        metrics[metric_name] = metric_func(y_true, temp_pred)
                 else:
                     metrics[metric_name] = metric_func(y_true, y_pred)
         return metrics

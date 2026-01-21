@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 
 from ..core import VespaTune
 from ..enums import TaskType
+from ..models import list_models
 from . import BaseCommand
 
 
@@ -19,6 +20,7 @@ def train_vespatune_command_factory(args):
         args.test_filename,
         args.num_trials,
         args.time_limit,
+        args.model,
     )
 
 
@@ -50,6 +52,14 @@ class TrainVespaTuneCommand(BaseCommand):
             help="Path to output directory",
             required=True,
             type=str,
+        )
+        _parser.add_argument(
+            "--model",
+            help="Model type to use",
+            required=False,
+            type=str,
+            default="xgboost",
+            choices=list_models(),
         )
         _parser.add_argument(
             "--task",
@@ -124,6 +134,7 @@ class TrainVespaTuneCommand(BaseCommand):
         test_filename,
         num_trials,
         time_limit,
+        model_type,
     ):
         self.train_filename = train_filename
         self.valid_filename = valid_filename
@@ -137,6 +148,7 @@ class TrainVespaTuneCommand(BaseCommand):
         self.test_filename = test_filename
         self.num_trials = num_trials
         self.time_limit = time_limit
+        self.model_type = model_type
 
     def execute(self):
         vt = VespaTune(
@@ -152,5 +164,6 @@ class TrainVespaTuneCommand(BaseCommand):
             test_filename=self.test_filename,
             num_trials=self.num_trials,
             time_limit=self.time_limit,
+            model_type=self.model_type,
         )
         vt.train()

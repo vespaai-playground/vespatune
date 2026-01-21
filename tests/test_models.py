@@ -1,0 +1,288 @@
+import numpy as np
+import pytest
+from unittest.mock import MagicMock
+
+from vespatune.models import get_model, list_models, register_model, MODEL_REGISTRY
+from vespatune.models.base import BaseModel
+from vespatune.models.xgboost_model import XGBoostModel
+from vespatune.models.lightgbm_model import LightGBMModel
+from vespatune.models.catboost_model import CatBoostModel
+
+
+class TestModelRegistry:
+    def test_list_models(self):
+        models = list_models()
+        assert "xgboost" in models
+        assert "lightgbm" in models
+        assert "catboost" in models
+
+    def test_get_model_xgboost(self):
+        model = get_model("xgboost", "binary_classification")
+        assert isinstance(model, XGBoostModel)
+        assert model.name == "xgboost"
+
+    def test_get_model_lightgbm(self):
+        model = get_model("lightgbm", "binary_classification")
+        assert isinstance(model, LightGBMModel)
+        assert model.name == "lightgbm"
+
+    def test_get_model_catboost(self):
+        model = get_model("catboost", "binary_classification")
+        assert isinstance(model, CatBoostModel)
+        assert model.name == "catboost"
+
+    def test_get_model_case_insensitive(self):
+        model = get_model("XGBOOST", "binary_classification")
+        assert isinstance(model, XGBoostModel)
+
+    def test_get_model_unknown(self):
+        with pytest.raises(ValueError, match="Unknown model"):
+            get_model("unknown_model", "binary_classification")
+
+    def test_register_model(self):
+        class DummyModel(BaseModel):
+            name = "dummy"
+            supports_categorical = False
+            supports_gpu = False
+
+            def get_params(self, trial, model_config):
+                return {}
+
+            def fit(self, X_train, y_train, X_valid, y_valid, params, categorical_features=None):
+                pass
+
+            def predict(self, X):
+                return np.zeros(len(X))
+
+            def predict_proba(self, X):
+                return np.zeros((len(X), 2))
+
+            def get_model(self):
+                return None
+
+            def save(self, path):
+                pass
+
+            def load(self, path):
+                pass
+
+        register_model("dummy", DummyModel)
+        assert "dummy" in MODEL_REGISTRY
+
+        model = get_model("dummy", "binary_classification")
+        assert isinstance(model, DummyModel)
+
+        # Cleanup
+        del MODEL_REGISTRY["dummy"]
+
+
+class TestXGBoostModel:
+    @pytest.fixture
+    def xgb_model(self):
+        return XGBoostModel(problem_type="binary_classification", random_state=42)
+
+    @pytest.fixture
+    def sample_data(self):
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 2, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 2, 20)
+        return X_train, y_train, X_valid, y_valid
+
+    def test_model_attributes(self, xgb_model):
+        assert xgb_model.name == "xgboost"
+        assert xgb_model.supports_categorical is False
+        assert xgb_model.supports_gpu is True
+
+    def test_fit_predict_binary(self, xgb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        xgb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = xgb_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+        assert set(predictions).issubset({0, 1})
+
+    def test_predict_proba_binary(self, xgb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        xgb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        proba = xgb_model.predict_proba(X_valid)
+
+        assert proba.shape == (20, 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_get_model(self, xgb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        xgb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        model = xgb_model.get_model()
+
+        assert model is not None
+
+    def test_regression(self):
+        model = XGBoostModel(problem_type="single_column_regression", random_state=42)
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randn(100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randn(20)
+
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+
+
+class TestLightGBMModel:
+    @pytest.fixture
+    def lgb_model(self):
+        return LightGBMModel(problem_type="binary_classification", random_state=42)
+
+    @pytest.fixture
+    def sample_data(self):
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 2, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 2, 20)
+        return X_train, y_train, X_valid, y_valid
+
+    def test_model_attributes(self, lgb_model):
+        assert lgb_model.name == "lightgbm"
+        assert lgb_model.supports_categorical is True
+        assert lgb_model.supports_gpu is True
+
+    def test_fit_predict_binary(self, lgb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        lgb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = lgb_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+        assert set(predictions).issubset({0, 1})
+
+    def test_predict_proba_binary(self, lgb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        lgb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        proba = lgb_model.predict_proba(X_valid)
+
+        assert proba.shape == (20, 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_regression(self):
+        model = LightGBMModel(problem_type="single_column_regression", random_state=42)
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randn(100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randn(20)
+
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+
+
+class TestCatBoostModel:
+    @pytest.fixture
+    def cb_model(self):
+        return CatBoostModel(problem_type="binary_classification", random_state=42)
+
+    @pytest.fixture
+    def sample_data(self):
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 2, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 2, 20)
+        return X_train, y_train, X_valid, y_valid
+
+    def test_model_attributes(self, cb_model):
+        assert cb_model.name == "catboost"
+        assert cb_model.supports_categorical is True
+        assert cb_model.supports_gpu is True
+
+    def test_fit_predict_binary(self, cb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        cb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = cb_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+        assert set(predictions).issubset({0, 1})
+
+    def test_predict_proba_binary(self, cb_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        cb_model.fit(X_train, y_train, X_valid, y_valid, params)
+        proba = cb_model.predict_proba(X_valid)
+
+        assert proba.shape == (20, 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_regression(self):
+        model = CatBoostModel(problem_type="single_column_regression", random_state=42)
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randn(100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randn(20)
+
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+
+
+class TestGetParams:
+    def test_xgboost_get_params(self):
+        model = XGBoostModel(problem_type="binary_classification", random_state=42)
+        trial = MagicMock()
+        trial.suggest_float.return_value = 0.1
+        trial.suggest_int.return_value = 5
+        trial.suggest_categorical.return_value = "gbtree"
+
+        model_config = MagicMock()
+        model_config.use_gpu = False
+
+        params = model.get_params(trial, model_config)
+        assert "learning_rate" in params or trial.suggest_float.called
+
+    def test_lightgbm_get_params(self):
+        model = LightGBMModel(problem_type="binary_classification", random_state=42)
+        trial = MagicMock()
+        trial.suggest_float.return_value = 0.1
+        trial.suggest_int.return_value = 5
+        trial.suggest_categorical.return_value = "gbdt"
+
+        model_config = MagicMock()
+        model_config.use_gpu = False
+
+        params = model.get_params(trial, model_config)
+        assert trial.suggest_float.called or trial.suggest_int.called
+
+    def test_catboost_get_params(self):
+        model = CatBoostModel(problem_type="binary_classification", random_state=42)
+        trial = MagicMock()
+        trial.suggest_float.return_value = 0.1
+        trial.suggest_int.return_value = 5
+        trial.suggest_categorical.return_value = "SymmetricTree"
+
+        model_config = MagicMock()
+        model_config.use_gpu = False
+
+        params = model.get_params(trial, model_config)
+        assert trial.suggest_float.called or trial.suggest_int.called

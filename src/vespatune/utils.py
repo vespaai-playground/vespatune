@@ -6,12 +6,11 @@ import joblib
 import numpy as np
 import optuna
 import pandas as pd
-import xgboost as xgb
 
 from .enums import ProblemType
 from .logger import logger
 from .metrics import Metrics
-from .params import get_params
+from .models import get_model
 
 
 optuna.logging.set_verbosity(optuna.logging.INFO)
@@ -57,88 +56,105 @@ def reduce_memory_usage(df, verbose=True):
     return df
 
 
-def fetch_xgb_model_params(model_config):
-    if model_config.problem_type == ProblemType.binary_classification:
-        xgb_model = xgb.XGBClassifier
-        use_predict_proba = True
-        direction = "minimize"
-        eval_metric = "logloss"
-    elif model_config.problem_type == ProblemType.multi_class_classification:
-        xgb_model = xgb.XGBClassifier
-        use_predict_proba = True
-        direction = "minimize"
-        eval_metric = "mlogloss"
-    elif model_config.problem_type == ProblemType.multi_label_classification:
-        xgb_model = xgb.XGBClassifier
-        use_predict_proba = True
-        direction = "minimize"
-        eval_metric = "logloss"
-    elif model_config.problem_type == ProblemType.single_column_regression:
-        xgb_model = xgb.XGBRegressor
-        use_predict_proba = False
-        direction = "minimize"
-        eval_metric = "rmse"
-    elif model_config.problem_type == ProblemType.multi_column_regression:
-        xgb_model = xgb.XGBRegressor
-        use_predict_proba = False
-        direction = "minimize"
-        eval_metric = "rmse"
-    else:
-        raise NotImplementedError
-
-    return xgb_model, use_predict_proba, eval_metric, direction
+def get_eval_metric_and_direction(problem_type):
+    """Get evaluation metric and optimization direction for problem type."""
+    metric_map = {
+        ProblemType.binary_classification: ("logloss", "minimize"),
+        ProblemType.multi_class_classification: ("mlogloss", "minimize"),
+        ProblemType.multi_label_classification: ("logloss", "minimize"),
+        ProblemType.single_column_regression: ("rmse", "minimize"),
+        ProblemType.multi_column_regression: ("rmse", "minimize"),
+    }
+    return metric_map.get(problem_type, ("rmse", "minimize"))
 
 
-def optimize(trial, xgb_model, use_predict_proba, eval_metric, model_config):
-    params = get_params(trial, model_config)
-    early_stopping_rounds = params.pop("early_stopping_rounds")
+def use_predict_proba(problem_type):
+    """Check if we should use predict_proba for this problem type."""
+    return problem_type in (
+        ProblemType.binary_classification,
+        ProblemType.multi_class_classification,
+        ProblemType.multi_label_classification,
+    )
+
+
+def get_categorical_indices(model_config):
+    """Get indices of categorical features."""
+    if not model_config.categorical_features:
+        return None
+    return [
+        model_config.features.index(f)
+        for f in model_config.categorical_features
+        if f in model_config.features
+    ]
+
+
+def optimize(trial, model_config):
+    """Optimization function for Optuna."""
+    model_name = getattr(model_config, "model_type", "xgboost")
+    problem_type_str = model_config.problem_type.name
+
+    # Create model instance
+    model = get_model(
+        model_name=model_name,
+        problem_type=problem_type_str,
+        random_state=model_config.seed,
+    )
+
+    # Get hyperparameters
+    params = model.get_params(trial, model_config)
 
     metrics = Metrics(model_config.problem_type)
+    eval_metric, _ = get_eval_metric_and_direction(model_config.problem_type)
 
     # Load data
     train_df = pd.read_feather(os.path.join(model_config.output, "train.feather"))
     valid_df = pd.read_feather(os.path.join(model_config.output, "valid.feather"))
 
-    xtrain = train_df[model_config.features]
-    xvalid = valid_df[model_config.features]
+    xtrain = train_df[model_config.features].values
+    xvalid = valid_df[model_config.features].values
     ytrain = train_df[model_config.targets].values
     yvalid = valid_df[model_config.targets].values
 
-    # Train model
-    model = xgb_model(
-        random_state=model_config.seed,
-        eval_metric=eval_metric,
-        early_stopping_rounds=early_stopping_rounds,
-        **params,
-    )
+    # Get categorical feature indices
+    cat_indices = get_categorical_indices(model_config)
 
+    # Train model
     if model_config.problem_type in (
         ProblemType.multi_column_regression,
         ProblemType.multi_label_classification,
     ):
         ypred = []
         for idx in range(len(model_config.targets)):
-            _m = copy.deepcopy(model)
-            _m.fit(
+            _model = get_model(
+                model_name=model_name,
+                problem_type=problem_type_str,
+                random_state=model_config.seed,
+            )
+            _params = copy.deepcopy(params)
+            _model.fit(
                 xtrain,
                 ytrain[:, idx],
-                eval_set=[(xvalid, yvalid[:, idx])],
-                verbose=False,
+                xvalid,
+                yvalid[:, idx],
+                _params,
+                categorical_features=cat_indices,
             )
             if model_config.problem_type == ProblemType.multi_column_regression:
-                ypred_temp = _m.predict(xvalid)
+                ypred_temp = _model.predict(xvalid)
             else:
-                ypred_temp = _m.predict_proba(xvalid)[:, 1]
+                ypred_temp = _model.predict_proba(xvalid)[:, 1]
             ypred.append(ypred_temp)
         ypred = np.column_stack(ypred)
     else:
         model.fit(
             xtrain,
-            ytrain,
-            eval_set=[(xvalid, yvalid)],
-            verbose=False,
+            ytrain.ravel() if ytrain.ndim > 1 else ytrain,
+            xvalid,
+            yvalid.ravel() if yvalid.ndim > 1 else yvalid,
+            params,
+            categorical_features=cat_indices,
         )
-        if use_predict_proba:
+        if use_predict_proba(model_config.problem_type):
             ypred = model.predict_proba(xvalid)
         else:
             ypred = model.predict(xvalid)
@@ -149,17 +165,11 @@ def optimize(trial, xgb_model, use_predict_proba, eval_metric, model_config):
 
 
 def train_model(model_config):
-    xgb_model, use_predict_proba, eval_metric, direction = fetch_xgb_model_params(
-        model_config
-    )
+    """Run hyperparameter optimization."""
+    _, direction = get_eval_metric_and_direction(model_config.problem_type)
 
-    optimize_func = partial(
-        optimize,
-        xgb_model=xgb_model,
-        use_predict_proba=use_predict_proba,
-        eval_metric=eval_metric,
-        model_config=model_config,
-    )
+    optimize_func = partial(optimize, model_config=model_config)
+
     db_path = os.path.join(model_config.output, "params.db")
     study = optuna.create_study(
         direction=direction,
@@ -177,48 +187,80 @@ def train_final_model(model_config, best_params):
     """Train a final model on all data (train + valid) using optimal hyperparameters."""
     logger.info("Training final model on all data with optimal parameters")
 
+    model_name = getattr(model_config, "model_type", "xgboost")
+    problem_type_str = model_config.problem_type.name
+
     best_params = copy.deepcopy(best_params)
     early_stopping_rounds = best_params.pop("early_stopping_rounds", None)
 
-    if model_config.use_gpu is True:
+    # Handle GPU settings for XGBoost
+    if model_config.use_gpu and model_name == "xgboost":
         best_params["device"] = "cuda"
         best_params["tree_method"] = "hist"
-
-    xgb_model, use_predict_proba, eval_metric, _ = fetch_xgb_model_params(model_config)
 
     # Load and combine train + valid data
     train_df = pd.read_feather(os.path.join(model_config.output, "train.feather"))
     valid_df = pd.read_feather(os.path.join(model_config.output, "valid.feather"))
     full_train_df = pd.concat([train_df, valid_df], ignore_index=True)
 
-    xtrain = full_train_df[model_config.features]
+    xtrain = full_train_df[model_config.features].values
     ytrain = full_train_df[model_config.targets].values
 
-    # For final model, we use a fixed n_estimators since we don't have a validation set
-    # Use the value from best_params or a reasonable default
-    if "n_estimators" not in best_params:
-        best_params["n_estimators"] = 10000
+    # Get categorical feature indices
+    cat_indices = get_categorical_indices(model_config)
+
+    # For final model, set n_estimators/iterations
+    if "n_estimators" not in best_params and "iterations" not in best_params:
+        if model_name == "catboost":
+            best_params["iterations"] = 10000
+        else:
+            best_params["n_estimators"] = 10000
 
     # Train final model
-    model = xgb_model(
-        random_state=model_config.seed,
-        eval_metric=eval_metric,
-        **best_params,
-    )
-
     if model_config.problem_type in (
         ProblemType.multi_column_regression,
         ProblemType.multi_label_classification,
     ):
         trained_models = []
         for idx in range(len(model_config.targets)):
-            _m = copy.deepcopy(model)
-            _m.fit(xtrain, ytrain[:, idx], verbose=False)
-            trained_models.append(_m)
+            _model = get_model(
+                model_name=model_name,
+                problem_type=problem_type_str,
+                random_state=model_config.seed,
+            )
+            _params = copy.deepcopy(best_params)
+
+            # For final training without early stopping, we need a dummy validation set
+            # Using a small portion of training data
+            split_idx = int(len(xtrain) * 0.9)
+            _model.fit(
+                xtrain[:split_idx],
+                ytrain[:split_idx, idx],
+                xtrain[split_idx:],
+                ytrain[split_idx:, idx],
+                _params,
+                categorical_features=cat_indices,
+            )
+            trained_models.append(_model.get_model())
         final_model = trained_models
     else:
-        model.fit(xtrain, ytrain, verbose=False)
-        final_model = model
+        model = get_model(
+            model_name=model_name,
+            problem_type=problem_type_str,
+            random_state=model_config.seed,
+        )
+        # For final training, use small validation split
+        split_idx = int(len(xtrain) * 0.9)
+        y = ytrain.ravel() if ytrain.ndim > 1 else ytrain
+        model.fit(
+            xtrain[:split_idx],
+            y[:split_idx],
+            xtrain[split_idx:],
+            y[split_idx:],
+            best_params,
+            categorical_features=cat_indices,
+        )
+        final_model = model.get_model()
 
     # Save final model
     final_model_path = os.path.join(model_config.output, "vtune_model.final")
@@ -227,47 +269,82 @@ def train_final_model(model_config, best_params):
 
     # Generate test predictions if test file provided
     if model_config.test_filename is not None:
-        logger.info("Generating test predictions")
-        test_df = pd.read_feather(os.path.join(model_config.output, "test.feather"))
-        xtest = test_df[model_config.features]
-        test_ids = test_df[model_config.idx].values
-
-        if model_config.problem_type in (
-            ProblemType.multi_column_regression,
-            ProblemType.multi_label_classification,
-        ):
-            test_preds = []
-            for idx in range(len(final_model)):
-                if model_config.problem_type == ProblemType.multi_column_regression:
-                    pred = final_model[idx].predict(xtest)
-                else:
-                    pred = final_model[idx].predict_proba(xtest)[:, 1]
-                test_preds.append(pred)
-            test_preds = np.column_stack(test_preds)
-        else:
-            if use_predict_proba:
-                test_preds = final_model.predict_proba(xtest)
-            else:
-                test_preds = final_model.predict(xtest)
-
-        # Save test predictions
-        target_encoder = joblib.load(f"{model_config.output}/vtune.target_encoder")
-        if target_encoder is None:
-            test_preds_df = pd.DataFrame(test_preds, columns=model_config.targets)
-        else:
-            test_preds_df = pd.DataFrame(
-                test_preds, columns=list(target_encoder.classes_)
-            )
-        test_preds_df.insert(loc=0, column=model_config.idx, value=test_ids)
-        test_preds_df.to_csv(
-            os.path.join(model_config.output, "test_predictions.csv"), index=False
-        )
-        logger.info("Test predictions saved to test_predictions.csv")
+        _generate_test_predictions(model_config, final_model)
 
     return final_model
 
 
-# Keep for backward compatibility but not used in simplified flow
-def predict_model(model_config, best_params):
-    """Deprecated: Use train_final_model instead."""
-    pass
+def _generate_test_predictions(model_config, final_model):
+    """Generate predictions on test set."""
+    logger.info("Generating test predictions")
+    test_df = pd.read_feather(os.path.join(model_config.output, "test.feather"))
+    xtest = test_df[model_config.features].values
+    test_ids = test_df[model_config.idx].values
+
+    if model_config.problem_type in (
+        ProblemType.multi_column_regression,
+        ProblemType.multi_label_classification,
+    ):
+        test_preds = []
+        for idx in range(len(final_model)):
+            if model_config.problem_type == ProblemType.multi_column_regression:
+                pred = final_model[idx].predict(xtest)
+            else:
+                pred = final_model[idx].predict_proba(xtest)[:, 1]
+            test_preds.append(pred)
+        test_preds = np.column_stack(test_preds)
+    else:
+        if use_predict_proba(model_config.problem_type):
+            test_preds = final_model.predict_proba(xtest)
+        else:
+            test_preds = final_model.predict(xtest)
+
+    # Save test predictions
+    target_encoder = joblib.load(f"{model_config.output}/vtune.target_encoder")
+    if target_encoder is None:
+        test_preds_df = pd.DataFrame(test_preds, columns=model_config.targets)
+    else:
+        test_preds_df = pd.DataFrame(
+            test_preds, columns=list(target_encoder.classes_)
+        )
+    test_preds_df.insert(loc=0, column=model_config.idx, value=test_ids)
+    test_preds_df.to_csv(
+        os.path.join(model_config.output, "test_predictions.csv"), index=False
+    )
+    logger.info("Test predictions saved to test_predictions.csv")
+
+
+# Legacy function for backward compatibility
+def fetch_xgb_model_params(model_config):
+    """Get XGBoost model parameters. Kept for backward compatibility."""
+    import xgboost as xgb
+
+    if model_config.problem_type == ProblemType.binary_classification:
+        xgb_model = xgb.XGBClassifier
+        use_proba = True
+        direction = "minimize"
+        eval_metric = "logloss"
+    elif model_config.problem_type == ProblemType.multi_class_classification:
+        xgb_model = xgb.XGBClassifier
+        use_proba = True
+        direction = "minimize"
+        eval_metric = "mlogloss"
+    elif model_config.problem_type == ProblemType.multi_label_classification:
+        xgb_model = xgb.XGBClassifier
+        use_proba = True
+        direction = "minimize"
+        eval_metric = "logloss"
+    elif model_config.problem_type == ProblemType.single_column_regression:
+        xgb_model = xgb.XGBRegressor
+        use_proba = False
+        direction = "minimize"
+        eval_metric = "rmse"
+    elif model_config.problem_type == ProblemType.multi_column_regression:
+        xgb_model = xgb.XGBRegressor
+        use_proba = False
+        direction = "minimize"
+        eval_metric = "rmse"
+    else:
+        raise NotImplementedError
+
+    return xgb_model, use_proba, eval_metric, direction
