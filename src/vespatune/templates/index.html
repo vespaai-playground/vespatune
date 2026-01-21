@@ -8,265 +8,215 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <h1>VespaTune</h1>
-            <div class="status-badge" id="connection-status">Disconnected</div>
-        </header>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">◈</span>
+                <span class="brand-text">VespaTune</span>
+                <span class="status-dot" id="connection-status" title="Disconnected"></span>
+            </div>
+            <button id="new-training-btn" class="btn-new">+ New Project</button>
+            <div class="run-list" id="run-list">
+                <div class="run-item placeholder">No runs yet</div>
+            </div>
 
-        <!-- Main Layout -->
-        <div class="app-body">
-            <!-- Sidebar -->
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <button id="new-training-btn" class="btn-primary full-width">+ New Training</button>
+            <!-- Project Summary (shown when run selected) -->
+            <div id="project-summary" class="project-summary" style="display: none;">
+                <div class="summary-header">
+                    <span class="summary-title" id="summary-project-name">Project</span>
+                    <span class="status-chip small" id="summary-status">Ready</span>
                 </div>
-                <div class="sidebar-content">
-                    <h3>History</h3>
-                    <div id="run-list" class="run-list">
-                        <!-- Run items will be injected here -->
-                        <div class="run-item placeholder">Loading runs...</div>
+                <div class="summary-grid">
+                    <div class="summary-row">
+                        <span class="summary-key">Train</span>
+                        <span class="summary-val" id="sum-train-file">--</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-key">Valid</span>
+                        <span class="summary-val" id="sum-valid-file">--</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-key">Target</span>
+                        <span class="summary-val" id="sum-target">--</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-key">Model</span>
+                        <span class="summary-val" id="sum-model">--</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-key">Trials</span>
+                        <span class="summary-val" id="sum-trials">--</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-key">Time Limit</span>
+                        <span class="summary-val" id="sum-time">--</span>
                     </div>
                 </div>
-            </aside>
+                <div class="summary-actions">
+                    <button type="button" id="stop-btn" class="btn-danger" style="display: none;">Stop</button>
+                    <button type="button" id="delete-btn" class="btn-ghost">Delete</button>
+                </div>
+            </div>
+        </aside>
 
-            <!-- Main Content -->
-            <main class="main-grid">
-                <!-- Left Panel: Configuration -->
-                <section class="panel config-panel">
-                    <h2>Configuration</h2>
+        <!-- Main Content (Monitor Only) -->
+        <main class="main">
+            <!-- Top Bar: Status + Metrics -->
+            <div class="monitor-header">
+                <div class="status-chip" id="training-status">Ready</div>
+                <div class="metrics-bar">
+                    <div class="metric">
+                        <span class="metric-val" id="trial-count">0</span>
+                        <span class="metric-label">trials</span>
+                    </div>
+                    <div class="metric highlight">
+                        <span class="metric-val" id="best-score">--</span>
+                        <span class="metric-label">best</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-val" id="latest-score">--</span>
+                        <span class="metric-label">latest</span>
+                    </div>
+                </div>
+            </div>
 
-                    <form id="train-form">
-                        <!-- Data Upload Section -->
-                        <div class="section-group">
-                            <h3>Data</h3>
-                            <div class="upload-row">
-                                <div class="upload-box" id="train-upload">
-                                    <input type="file" id="train_file" accept=".csv" hidden>
-                                    <span class="upload-label">Train CSV</span>
-                                    <span class="upload-status" id="train_file_info">Click to upload</span>
-                                </div>
-                                <div class="upload-box" id="valid-upload">
-                                    <input type="file" id="valid_file" accept=".csv" hidden>
-                                    <span class="upload-label">Valid CSV</span>
-                                    <span class="upload-status" id="valid_file_info">Click to upload</span>
-                                </div>
+            <!-- Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span>Optimization Progress</span>
+                    <select id="metric-select" class="metric-dropdown">
+                        <option value="value">Objective</option>
+                    </select>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="optimization-chart"></canvas>
+                    <div class="chart-placeholder" id="chart-placeholder">
+                        Start training to see progress
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Params + Trials -->
+            <div class="results-row">
+                <div class="params-card">
+                    <div class="card-header">Best Parameters</div>
+                    <pre id="best-params">No results yet</pre>
+                </div>
+                <div class="trials-card">
+                    <div class="card-header">
+                        Trials
+                        <span class="badge" id="history-count">0</span>
+                    </div>
+                    <div class="trial-list" id="trial-list">
+                        <div class="trial-empty">Trials will appear here</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="new-project-modal" class="modal">
+        <div class="modal-box modal-form">
+            <div class="modal-header">
+                <span>New Project</span>
+                <button class="close-modal" id="close-new-project">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="train-form">
+                    <div class="form-section">
+                        <label class="section-label">Data</label>
+                        <div class="upload-grid">
+                            <div class="upload-box" id="train-upload">
+                                <input type="file" id="train_file" accept=".csv" hidden>
+                                <span class="upload-icon">↑</span>
+                                <span class="upload-text" id="train_file_info">Train CSV</span>
                             </div>
-                            <input type="hidden" id="train_filename" name="train_filename" required>
-                            <input type="hidden" id="valid_filename" name="valid_filename" required>
-                        </div>
-
-                        <!-- Column Selection -->
-                        <div class="section-group">
-                            <h3>Columns</h3>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="target_columns">Target</label>
-                                    <select id="target_columns" name="target_columns" required multiple>
-                                        <option value="" disabled>Upload CSV first</option>
-                                    </select>
-                                    <small>Hold Ctrl/Cmd for multiple</small>
-                                </div>
-                                <div class="form-group">
-                                    <label for="id_column">ID Column</label>
-                                    <select id="id_column" name="id_column">
-                                        <option value="">None</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Model Settings -->
-                        <div class="section-group">
-                            <h3>Model</h3>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="task">Task</label>
-                                    <select id="task" name="task">
-                                        {% for task in tasks %}
-                                        <option value="{{ task }}">{{ task }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="model_type">Model</label>
-                                    <select id="model_type" name="model_type">
-                                        {% for model in models %}
-                                        <option value="{{ model }}">{{ model }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="num_trials">Trials</label>
-                                    <input type="number" id="num_trials" name="num_trials" value="10" min="1">
-                                </div>
-                                <div class="form-group">
-                                    <label for="time_limit">Time (sec)</label>
-                                    <input type="number" id="time_limit" name="time_limit" value="3600" min="60">
-                                </div>
-                            </div>
-                        </div>
-
-
-                        <!-- Project -->
-                        <div class="section-group">
-                            <h3>Project</h3>
-                            <div class="form-group">
-                                <label for="project_name">Project Name</label>
-                                <input type="text" id="project_name" name="project_name" required
-                                    pattern="[a-zA-Z0-9-]+" placeholder="my-ml-project"
-                                    title="Alphanumeric and hyphens only">
-                                <small>Alphanumeric and hyphens only</small>
+                            <div class="upload-box" id="valid-upload">
+                                <input type="file" id="valid_file" accept=".csv" hidden>
+                                <span class="upload-icon">↑</span>
+                                <span class="upload-text" id="valid_file_info">Valid CSV</span>
                             </div>
                         </div>
-
-                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                            <button type="submit" id="start-btn">Start Training</button>
-                        </div>
-                    </form>
-
-                    <!-- Training Summary (Hidden by default) -->
-                    <div id="training-summary" style="display: none;">
-                        <div class="section-group">
-                            <h3>Training in Progress</h3>
-                            <div class="summary-item">
-                                <span class="summary-label">Train Data:</span>
-                                <span class="summary-value" id="sum-train-file">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Valid Data:</span>
-                                <span class="summary-value" id="sum-valid-file">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Target:</span>
-                                <span class="summary-value" id="sum-target">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">ID Column:</span>
-                                <span class="summary-value" id="sum-id">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Model:</span>
-                                <span class="summary-value" id="sum-model">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Project:</span>
-                                <span class="summary-value" id="sum-project">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Trials:</span>
-                                <span class="summary-value" id="sum-trials">--</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="summary-label">Time Limit:</span>
-                                <span class="summary-value" id="sum-time">--</span>
-                            </div>
-                        </div>
-                        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
-                            <button type="button" id="stop-btn" class="btn-danger">Stop Training</button>
-                            <button type="button" id="delete-btn" class="btn-outline-danger"
-                                style="display: none;">Delete Run</button>
-                        </div>
+                        <input type="hidden" id="train_filename" name="train_filename" required>
+                        <input type="hidden" id="valid_filename" name="valid_filename" required>
                     </div>
 
-
-                </section>
-
-                <!-- Right Panel: Training Monitor & Results -->
-                <section class="panel monitor-panel">
-                    <!-- Status Bar -->
-                    <div class="status-bar">
-                        <span class="status-text" id="training-status">Ready</span>
-                        <span class="progress-info" id="progress-info"></span>
+                    <div class="form-section">
+                        <label class="section-label">Target Column(s)</label>
+                        <select id="target_columns" name="target_columns" required multiple>
+                            <option value="" disabled>Upload CSV first</option>
+                        </select>
                     </div>
 
-                    <!-- Live Metrics -->
-                    <div class="metrics-row">
-                        <div class="metric-card">
-                            <span class="metric-label">Trials</span>
-                            <span class="metric-value" id="trial-count">0</span>
+                    <div class="form-section">
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="use_id_column" />
+                            <label for="use_id_column">Use ID Column</label>
                         </div>
-                        <div class="metric-card">
-                            <span class="metric-label">Best Score</span>
-                            <span class="metric-value" id="best-score">--</span>
-                        </div>
-                        <div class="metric-card">
-                            <span class="metric-label">Latest</span>
-                            <span class="metric-value" id="latest-score">--</span>
-                        </div>
+                        <select id="id_column" name="id_column" disabled>
+                            <option value="" disabled>Select ID column</option>
+                        </select>
                     </div>
 
-                    <!-- Chart Area -->
-                    <div class="chart-container">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <h3>Optimization Progress</h3>
-                            <div class="header-controls">
-                                <select id="metric-select" class="small-select"
-                                    style="width: auto; padding: 0.25rem 0.5rem;">
-                                    <option value="value">Objective Value</option>
-                                </select>
+                    <div class="form-section">
+                        <label class="section-label">Model</label>
+                        <div class="form-row">
+                            <select id="task" name="task">
+                                {% for task in tasks %}
+                                <option value="{{ task }}">{{ task }}</option>
+                                {% endfor %}
+                            </select>
+                            <select id="model_type" name="model_type">
+                                {% for model in models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field compact">
+                                <label>Trials</label>
+                                <input type="number" id="num_trials" name="num_trials" value="10" min="1">
                             </div>
-                        </div>
-                        <div class="chart-area" id="chart-area">
-                            <canvas id="optimization-chart"></canvas>
-                            <div class="chart-placeholder" id="chart-placeholder">
-                                Run training to see optimization progress
+                            <div class="form-field compact">
+                                <label>Time (s)</label>
+                                <input type="number" id="time_limit" name="time_limit" value="3600" min="60">
                             </div>
                         </div>
                     </div>
 
-                    <!-- Best Parameters -->
-                    <div class="params-section">
-                        <h3>Best Parameters</h3>
-                        <pre id="best-params">No results yet</pre>
+                    <div class="form-section">
+                        <label class="section-label">Project Name</label>
+                        <input type="text" id="project_name" name="project_name" required
+                            pattern="[a-zA-Z0-9-]+" placeholder="my-project">
                     </div>
 
-                    <!-- Trial History -->
-                    <div class="trials-section">
-                        <h3>Trial History <span class="trial-count-badge" id="history-count">0</span></h3>
-                        <div class="trial-list" id="trial-list">
-                            <div class="trial-placeholder">Trials will appear here</div>
-                        </div>
-                    </div>
-
-                    <!-- Log Window -->
-                    <div class="log-section">
-                        <h3>Logs</h3>
-                        <div class="log-window" id="ws-logs">
-                            <div class="log-line">Waiting for training to start...</div>
-                        </div>
-                    </div>
-                </section>
-                </section>
-            </main>
+                    <button type="submit" id="start-btn" class="btn-primary">Start Training</button>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Trial Details Modal -->
     <div id="trial-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-box">
             <div class="modal-header">
-                <h3 id="modal-title">Trial Details</h3>
-                <span class="close-modal">&times;</span>
+                <span id="modal-title">Trial Details</span>
+                <button class="close-modal" id="close-trial-modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="modal-section">
-                    <h4>Metrics</h4>
+                    <label>Metrics</label>
                     <pre id="modal-metrics">--</pre>
                 </div>
                 <div class="modal-section">
-                    <h4>Parameters</h4>
+                    <label>Parameters</label>
                     <pre id="modal-params">--</pre>
                 </div>
             </div>

@@ -5,57 +5,97 @@ document.addEventListener('DOMContentLoaded', () => {
     let bestValue = null;
     let columns = [];
     let chart = null;
-    let currentMetric = 'value'; // default metric to plot
+    let currentMetric = 'value';
     let availableMetrics = new Set(['value']);
     let isTraining = false;
-
-    // --- New State for Full App ---
     let runs = [];
-    let activeRunId = null;   // The ID of the currently running process (if any)
-    let selectedRunId = null; // The ID currently displayed in the main view (null = New Training)
+    let activeRunId = null;
+    let selectedRunId = null;
 
     // --- DOM Elements ---
     const runListContainer = document.getElementById('run-list');
     const newTrainingBtn = document.getElementById('new-training-btn');
     const form = document.getElementById('train-form');
-    const logsDiv = document.getElementById('ws-logs');
     const trialList = document.getElementById('trial-list');
-    const statusText = document.getElementById('training-status');
+    const statusChip = document.getElementById('training-status');
     const connectionStatus = document.getElementById('connection-status');
     const trialCount = document.getElementById('trial-count');
     const bestScore = document.getElementById('best-score');
     const latestScore = document.getElementById('latest-score');
     const historyCount = document.getElementById('history-count');
     const bestParams = document.getElementById('best-params');
-    const progressInfo = document.getElementById('progress-info');
     const chartPlaceholder = document.getElementById('chart-placeholder');
     const targetSelect = document.getElementById('target_columns');
     const idSelect = document.getElementById('id_column');
-
     const stopBtn = document.getElementById('stop-btn');
     const deleteBtn = document.getElementById('delete-btn');
-    const startBtn = document.getElementById('start-btn');
     const metricSelect = document.getElementById('metric-select');
+    const useIdColumnCheckbox = document.getElementById('use_id_column');
 
-    // Summary Elements
-    const summaryDiv = document.getElementById('training-summary');
+    // Summary Elements (in sidebar)
+    const projectSummary = document.getElementById('project-summary');
+    const summaryProjectName = document.getElementById('summary-project-name');
+    const summaryStatus = document.getElementById('summary-status');
     const sumTrainFile = document.getElementById('sum-train-file');
     const sumValidFile = document.getElementById('sum-valid-file');
     const sumTarget = document.getElementById('sum-target');
-    const sumId = document.getElementById('sum-id');
     const sumModel = document.getElementById('sum-model');
-    const sumProject = document.getElementById('sum-project');
     const sumTrials = document.getElementById('sum-trials');
     const sumTime = document.getElementById('sum-time');
 
-    // Modal Elements
-    const modal = document.getElementById('trial-modal');
+    // New Project Modal
+    const newProjectModal = document.getElementById('new-project-modal');
+    const closeNewProjectBtn = document.getElementById('close-new-project');
+
+    // Trial Modal
+    const trialModal = document.getElementById('trial-modal');
     const modalTitle = document.getElementById('modal-title');
     const modalMetrics = document.getElementById('modal-metrics');
     const modalParams = document.getElementById('modal-params');
-    const closeModal = document.querySelector('.close-modal');
+    const closeTrialModalBtn = document.getElementById('close-trial-modal');
 
-    // --- File Uploads with Column Detection ---
+    // --- Modal Functions ---
+    function openNewProjectModal() {
+        resetForm();
+        newProjectModal.style.display = 'flex';
+    }
+
+    function closeNewProjectModal() {
+        newProjectModal.style.display = 'none';
+    }
+
+    function resetForm() {
+        form.reset();
+        document.getElementById('train_filename').value = '';
+        document.getElementById('valid_filename').value = '';
+        document.getElementById('train_file_info').textContent = 'Train CSV';
+        document.getElementById('valid_file_info').textContent = 'Valid CSV';
+        document.getElementById('train-upload').classList.remove('uploaded');
+        document.getElementById('valid-upload').classList.remove('uploaded');
+        targetSelect.innerHTML = '<option value="" disabled>Upload CSV first</option>';
+        idSelect.innerHTML = '<option value="" disabled>Select ID column</option>';
+        useIdColumnCheckbox.checked = false;
+        idSelect.disabled = true;
+        columns = [];
+    }
+
+    newTrainingBtn.addEventListener('click', openNewProjectModal);
+    closeNewProjectBtn.addEventListener('click', closeNewProjectModal);
+
+    // Close modal on backdrop click
+    newProjectModal.addEventListener('click', (e) => {
+        if (e.target === newProjectModal) closeNewProjectModal();
+    });
+
+    // ID column checkbox toggle
+    useIdColumnCheckbox.addEventListener('change', () => {
+        idSelect.disabled = !useIdColumnCheckbox.checked;
+        if (!useIdColumnCheckbox.checked) {
+            idSelect.value = '';
+        }
+    });
+
+    // --- File Uploads ---
     function setupUpload(boxId, inputId, hiddenId, statusId, isTrainFile) {
         const box = document.getElementById(boxId);
         const input = document.getElementById(inputId);
@@ -82,101 +122,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 status.textContent = file.name;
                 box.classList.add('uploaded');
 
-                // Populate column dropdowns from train file
                 if (isTrainFile && data.columns) {
                     columns = data.columns;
                     populateColumnDropdowns(columns);
                 }
             } catch (e) {
-                status.textContent = 'Upload failed';
+                status.textContent = 'Failed';
                 console.error(e);
             }
         });
     }
 
     function populateColumnDropdowns(cols) {
-        // Target columns (multi-select)
         targetSelect.innerHTML = '';
         cols.forEach(col => {
             const opt = document.createElement('option');
             opt.value = col;
             opt.textContent = col;
-            // Auto-select common target column names
             if (['target', 'label', 'y', 'class', 'outcome'].includes(col.toLowerCase())) {
                 opt.selected = true;
             }
             targetSelect.appendChild(opt);
         });
 
-        // ID column (single select with None option)
-        idSelect.innerHTML = '<option value="">None</option>';
+        idSelect.innerHTML = '';
+        let hasAutoSelected = false;
         cols.forEach(col => {
             const opt = document.createElement('option');
             opt.value = col;
             opt.textContent = col;
-            // Auto-select common ID column names
-            if (['id', 'index', 'row_id', 'sample_id'].includes(col.toLowerCase())) {
+            // Auto-select and enable checkbox if common ID column found
+            if (['id', 'index', 'row_id', 'sample_id'].includes(col.toLowerCase()) && !hasAutoSelected) {
                 opt.selected = true;
+                hasAutoSelected = true;
+                useIdColumnCheckbox.checked = true;
+                idSelect.disabled = false;
             }
             idSelect.appendChild(opt);
         });
+
+        // If no auto-selection, ensure checkbox is unchecked and dropdown disabled
+        if (!hasAutoSelected) {
+            useIdColumnCheckbox.checked = false;
+            idSelect.disabled = true;
+        }
     }
 
     setupUpload('train-upload', 'train_file', 'train_filename', 'train_file_info', true);
     setupUpload('valid-upload', 'valid_file', 'valid_filename', 'valid_file_info', false);
-
-    async function restoreFormFromConfig(config) {
-        if (!config) return;
-
-        try {
-            // Restore file paths
-            if (config.train_filename) {
-                document.getElementById('train_filename').value = config.train_filename;
-                // For secure temp files, we might not have original filename display, 
-                // but we can try to show something indicative or just "Uploaded File"
-                // Ideally, backend should persist original filename too. 
-                // For now, let's use the path basename or just "Restored File".
-                const display = config.train_filename.split('/').pop();
-                document.getElementById('train_file_info').textContent = display;
-                document.getElementById('train-upload').classList.add('uploaded');
-
-                // Fetch valid columns for this file
-                await fetchAndPopulateColumns(config.train_filename);
-            }
-
-            if (config.valid_filename) {
-                document.getElementById('valid_filename').value = config.valid_filename;
-                const display = config.valid_filename.split('/').pop();
-                document.getElementById('valid_file_info').textContent = display;
-                document.getElementById('valid-upload').classList.add('uploaded');
-            }
-
-            // Restore other inputs
-            const inputs = form.querySelectorAll('input, select');
-            inputs.forEach(input => {
-                if (input.type !== 'file' && input.type !== 'hidden' && input.id && config[input.id] !== undefined) {
-                    if (input.id !== 'target_columns' && input.id !== 'id_column') {
-                        input.value = config[input.id];
-                    }
-                }
-            });
-
-            // Restore Dropdowns (after columns populated)
-            // Parse target columns (stored as semicolon separated string in TrainRequest/DB)
-            if (config.target_columns) {
-                const targets = config.target_columns.split(';').map(s => s.trim());
-                Array.from(targetSelect.options).forEach(opt => {
-                    opt.selected = targets.includes(opt.value);
-                });
-            }
-            if (config.id_column) {
-                idSelect.value = config.id_column;
-            }
-
-        } catch (e) {
-            console.error('Error restoring config', e);
-        }
-    }
 
     async function fetchAndPopulateColumns(path) {
         try {
@@ -216,21 +209,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     tooltip: {
                         mode: 'index',
                         intersect: false,
-                        backgroundColor: '#1e293b',
-                        titleColor: '#f1f5f9',
-                        bodyColor: '#94a3b8',
-                        borderColor: '#334155',
+                        backgroundColor: '#12121a',
+                        titleColor: '#e8e8ec',
+                        bodyColor: '#8888a0',
+                        borderColor: '#2a2a3a',
                         borderWidth: 1
                     }
                 },
                 scales: {
                     x: {
-                        grid: { color: '#334155' },
-                        ticks: { color: '#94a3b8' }
+                        grid: { color: '#2a2a3a' },
+                        ticks: { color: '#5a5a70', font: { size: 10 } }
                     },
                     y: {
-                        grid: { color: '#334155' },
-                        ticks: { color: '#94a3b8' }
+                        grid: { color: '#2a2a3a' },
+                        ticks: { color: '#5a5a70', font: { size: 10 } }
                     }
                 },
                 interaction: {
@@ -242,45 +235,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- WebSocket & Training ---
+    // --- Form Submit & Training ---
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-
         if (isTraining) return;
 
-        // Reset state
-        resetState();
-
-        // Get selected targets
         const selectedTargets = Array.from(targetSelect.selectedOptions).map(o => o.value);
         if (selectedTargets.length === 0) {
-            appendLog('Please select at least one target column', 'error');
+            alert('Please select at least one target column');
             return;
         }
 
-        connectWebSocket();
-        startTraining(selectedTargets);
+        // Close modal and start training
+        closeNewProjectModal();
+
+        // Connect WebSocket and wait for connection before starting
+        await connectWebSocket();
+        await startTraining(selectedTargets);
     });
 
     stopBtn.addEventListener('click', async () => {
-        // Check if we're viewing the active run (not just if isTraining, since we might load an active run from DB)
         if (!activeRunId || selectedRunId !== activeRunId) return;
 
         try {
             await fetch('/stop', { method: 'POST' });
-            appendLog('Stopping training...', 'warning');
             stopBtn.disabled = true;
             stopBtn.textContent = 'Stopping...';
-
-            // Update UI state
             isTraining = false;
 
-            // Refresh runs to get updated status
             setTimeout(async () => {
                 await fetchRuns();
-                // Re-select to refresh the view
-                if (selectedRunId === activeRunId) {
-                    selectRun(selectedRunId);
+                if (selectedRunId) {
+                    await loadRunDetails(selectedRunId);
                 }
             }, 1000);
         } catch (e) {
@@ -290,50 +276,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     deleteBtn.addEventListener('click', async () => {
         if (!selectedRunId) return;
-        if (!confirm('Are you sure you want to delete this run? This action cannot be undone.')) return;
+        if (!confirm('Delete this run?')) return;
 
         try {
             const resp = await fetch(`/runs/${selectedRunId}`, { method: 'DELETE' });
             if (resp.ok) {
-                // Remove from sidebar
                 await fetchRuns();
-                // Select active run or new training
-                selectRun(activeRunId);
-            } else {
-                const data = await resp.json();
-                alert(`Error deleting run: ${data.detail}`);
+                // Select another run or hide summary
+                if (runs.length > 0) {
+                    selectRun(runs[0].id);
+                } else {
+                    selectedRunId = null;
+                    projectSummary.style.display = 'none';
+                    resetMonitorState();
+                }
             }
         } catch (e) {
             console.error(e);
-            alert('Failed to delete run');
         }
     });
 
     function connectWebSocket() {
-        if (ws && ws.readyState === WebSocket.OPEN) return;
+        return new Promise((resolve) => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                resolve();
+                return;
+            }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
-        ws.onopen = () => {
-            connectionStatus.textContent = 'Connected';
-            connectionStatus.classList.add('connected');
-        };
+            ws.onopen = () => {
+                connectionStatus.classList.add('connected');
+                connectionStatus.title = 'Connected';
+                resolve();
+            };
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            handleMessage(data);
-        };
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
 
-        ws.onclose = () => {
-            connectionStatus.textContent = 'Disconnected';
-            connectionStatus.classList.remove('connected');
-        };
+            ws.onclose = () => {
+                connectionStatus.classList.remove('connected');
+                connectionStatus.title = 'Disconnected';
+            };
 
-        ws.onerror = (e) => {
-            appendLog('WebSocket error', 'error');
-            console.error(e);
-        };
+            ws.onerror = (e) => {
+                console.error(e);
+                resolve(); // Resolve anyway to not block
+            };
+        });
     }
 
     async function startTraining(selectedTargets) {
@@ -342,6 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (const [key, value] of formData.entries()) {
             if (key === 'target_columns') continue;
+            if (key === 'id_column') continue; // Handle separately
             const input = document.getElementById(key);
             if (input && input.type === 'number') {
                 data[key] = parseFloat(value);
@@ -352,6 +346,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         data.target_columns = selectedTargets.join(';');
 
+        // Only include id_column if checkbox is checked
+        if (useIdColumnCheckbox.checked && idSelect.value) {
+            data.id_column = idSelect.value;
+        } else {
+            data.id_column = '';
+        }
+
         try {
             const resp = await fetch('/train', {
                 method: 'POST',
@@ -359,15 +360,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(data)
             });
             const result = await resp.json();
+
             if (!resp.ok) {
-                appendLog(`Error: ${result.detail || JSON.stringify(result)}`, 'error');
                 setStatus('Error', 'error');
+                setSummaryStatus('Error', 'error');
             } else {
-                setTrainingState(true);
+                isTraining = true;
+
+                // Reset monitor state for new training
+                resetMonitorState();
+                setStatus('Starting...', 'running');
+                setSummaryStatus('Running', 'running');
+
+                // Fetch runs to get the new run
+                await fetchRuns();
+
+                // Find the newest run and set it as active/selected without full reload
+                if (runs.length > 0) {
+                    const newestRun = runs[0];
+                    activeRunId = newestRun.id;
+                    selectedRunId = newestRun.id;
+                    renderSidebar();
+
+                    // Show summary with form data (don't fetch from server to avoid reset)
+                    projectSummary.style.display = 'block';
+                    summaryProjectName.textContent = data.project_name || 'Project';
+                    sumTrainFile.textContent = document.getElementById('train_file_info').textContent;
+                    sumValidFile.textContent = document.getElementById('valid_file_info').textContent;
+                    sumTarget.textContent = data.target_columns.replace(/;/g, ', ');
+                    sumModel.textContent = `${data.model_type} (${data.task})`;
+                    sumTrials.textContent = data.num_trials;
+                    sumTime.textContent = `${data.time_limit}s`;
+
+                    // Show stop button, hide delete
+                    stopBtn.style.display = 'inline-block';
+                    stopBtn.disabled = false;
+                    stopBtn.textContent = 'Stop';
+                    deleteBtn.style.display = 'none';
+                }
             }
         } catch (e) {
-            appendLog(`Error: ${e}`, 'error');
             setStatus('Error', 'error');
+            console.error(e);
         }
     }
 
@@ -375,90 +409,62 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (data.type) {
             case 'status':
                 setStatus(data.message, 'running');
-                appendLog(data.message, 'info');
+                setSummaryStatus(data.message, 'running');
                 break;
-
             case 'trial_complete':
                 addTrial(data);
                 break;
-
             case 'training_finished':
                 setStatus('Completed', 'completed');
-                appendLog('Training completed successfully!', 'info');
-                setTrainingState(false);
+                setSummaryStatus('Completed', 'completed');
+                isTraining = false;
+                fetchRuns(); // Refresh to update status
                 break;
-
             case 'info':
-                appendLog(data.message, 'info');
                 break;
-
             case 'error':
                 setStatus('Error', 'error');
-                appendLog(`Error: ${data.message}`, 'error');
-                setTrainingState(false);
+                setSummaryStatus('Error', 'error');
+                isTraining = false;
                 break;
         }
     }
 
-    function setTrainingState(active) {
-        isTraining = active;
-        if (active) {
-            form.style.display = 'none';
-            summaryDiv.style.display = 'block';
-            updateSummary();
-            stopBtn.disabled = false;
-            stopBtn.textContent = 'Stop Training';
-        } else {
-            form.style.display = 'block';
-            summaryDiv.style.display = 'none';
-        }
+    function updateSummary(config) {
+        if (!config) return;
+
+        summaryProjectName.textContent = config.project_name || 'Project';
+
+        const trainFile = config.train_filename ? config.train_filename.split('/').pop() : '--';
+        const validFile = config.valid_filename ? config.valid_filename.split('/').pop() : '--';
+
+        sumTrainFile.textContent = trainFile;
+        sumValidFile.textContent = validFile;
+        sumTarget.textContent = config.target_columns ? config.target_columns.replace(/;/g, ', ') : '--';
+        sumModel.textContent = config.model_type ? `${config.model_type} (${config.task || ''})` : '--';
+        sumTrials.textContent = config.num_trials || '--';
+        sumTime.textContent = config.time_limit ? `${config.time_limit}s` : '--';
     }
 
-    function updateSummary() {
-        const trainInfo = document.getElementById('train_file_info').textContent;
-        const validInfo = document.getElementById('valid_file_info').textContent;
-
-        // Use form values (which should be restored by now)
-        const trainVal = trainInfo !== 'Click to upload' ? trainInfo : (document.getElementById('train_filename').value || '--');
-        const validVal = validInfo !== 'Click to upload' ? validInfo : (document.getElementById('valid_filename').value || '--');
-
-        sumTrainFile.textContent = trainVal;
-        sumValidFile.textContent = validVal;
-
-        let targets = Array.from(targetSelect.selectedOptions).map(o => o.value).join(', ');
-        sumTarget.textContent = targets || 'None';
-
-        // Handle ID column
-        let idVal = document.getElementById('id_column').value;
-        sumId.textContent = idVal || 'None';
-
-        const modelType = document.getElementById('model_type').value || '--';
-        const taskType = document.getElementById('task').value || '--';
-        sumModel.textContent = `${modelType} (${taskType})`;
-
-        sumProject.textContent = document.getElementById('project_name').value || '--';
-
-        const numTrials = document.getElementById('num_trials').value || '--';
-        sumTrials.textContent = numTrials;
-
-        const timeLimit = document.getElementById('time_limit').value || '--';
-        sumTime.textContent = timeLimit ? `${timeLimit}s` : '--';
+    function setSummaryStatus(message, type) {
+        summaryStatus.textContent = message;
+        summaryStatus.className = 'status-chip small';
+        if (type) summaryStatus.classList.add(type);
     }
 
-    function resetState() {
+    function resetMonitorState() {
         trials = [];
         bestValue = null;
         availableMetrics = new Set(['value']);
         updateMetricDropdown();
         clearTrialList();
-        clearLogs();
 
         if (chart) {
             chart.data.labels = [];
             chart.data.datasets[0].data = [];
             chart.update();
         } else {
-            initChart(); // Ensure chart is initialized
+            initChart();
         }
 
         chartPlaceholder.style.display = 'flex';
@@ -469,18 +475,17 @@ document.addEventListener('DOMContentLoaded', () => {
         latestScore.textContent = '--';
         historyCount.textContent = '0';
         bestParams.textContent = 'No results yet';
+        setStatus('Ready', '');
     }
 
-    // --- Metric Selection ---
     metricSelect.addEventListener('change', () => {
         currentMetric = metricSelect.value;
         updateChart();
     });
 
     function updateMetricDropdown() {
-        // Keep current selection if valid
         const current = metricSelect.value;
-        metricSelect.innerHTML = '<option value="value">Objective Value</option>';
+        metricSelect.innerHTML = '<option value="value">Objective</option>';
 
         availableMetrics.forEach(m => {
             if (m === 'value') return;
@@ -496,23 +501,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addTrial(data) {
-        // Check if trial already exists (deduplication)
         const existingIndex = trials.findIndex(t => t.number === data.number);
-        if (existingIndex !== -1) {
-            // Trial already exists, skip
-            return;
-        }
+        if (existingIndex !== -1) return;
 
-        // Store all metrics
         const trialData = {
             number: data.number,
             value: data.value,
             params: data.params,
-            metrics: data.metrics || data.user_attrs || {},  // Handle both formats
+            metrics: data.metrics || data.user_attrs || {},
             time: new Date()
         };
 
-        // Add user_attrs keys to available metrics
         if (trialData.metrics) {
             Object.keys(trialData.metrics).forEach(k => availableMetrics.add(k));
             updateMetricDropdown();
@@ -521,10 +520,8 @@ document.addEventListener('DOMContentLoaded', () => {
         trials.push(trialData);
         trials.sort((a, b) => a.number - b.number);
 
-        // Update Global Best
         if (bestValue === null || data.value < bestValue) {
             bestValue = data.value;
-            // bestParams.textContent = JSON.stringify(data.best_params, null, 2); // This might not be present in trial object
             if (data.best_params) bestParams.textContent = JSON.stringify(data.best_params, null, 2);
             bestScore.textContent = bestValue.toFixed(6);
         }
@@ -533,7 +530,6 @@ document.addEventListener('DOMContentLoaded', () => {
         trialCount.textContent = trials.length;
         historyCount.textContent = trials.length;
 
-        // UI Updates
         updateChart();
         addTrialToList(trialData, data.value === bestValue);
     }
@@ -547,7 +543,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         chart.data.labels = trials.map(t => `#${t.number}`);
 
-        // Map data based on selected metric
         const dataPoints = trials.map(t => {
             if (currentMetric === 'value') return t.value;
             return t.metrics?.[currentMetric] ?? null;
@@ -559,26 +554,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addTrialToList(t, isBest) {
-        // Remove placeholder
-        const placeholder = trialList.querySelector('.trial-placeholder');
-        if (placeholder) placeholder.remove();
+        const empty = trialList.querySelector('.trial-empty');
+        if (empty) empty.remove();
 
         const div = document.createElement('div');
         div.className = `trial-item${isBest ? ' best' : ''}`;
         div.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span class="trial-number">#${t.number}</span>
-                <span class="trial-params">${Object.keys(t.params).length} params</span>
-            </div>
+            <span class="trial-number">#${t.number}</span>
             <span class="trial-value">${t.value?.toFixed(6)}</span>
         `;
 
-        div.addEventListener('click', () => openModal(t));
-
-        // Prepend to list
+        div.addEventListener('click', () => openTrialModal(t));
         trialList.prepend(div);
 
-        // Update other best markers
         if (isBest) {
             Array.from(trialList.children).forEach(child => {
                 if (child !== div) child.classList.remove('best');
@@ -586,13 +574,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Modal Handling ---
-    function openModal(trial) {
+    // --- Trial Modal ---
+    function openTrialModal(trial) {
         modalTitle.textContent = `Trial #${trial.number}`;
         modalParams.textContent = JSON.stringify(trial.params, null, 2);
 
-        // Format metrics
-        let metricsText = `Objective Value: ${trial.value}\n`;
+        let metricsText = `Objective: ${trial.value}\n`;
         if (trial.metrics) {
             Object.entries(trial.metrics).forEach(([k, v]) => {
                 metricsText += `${k}: ${v}\n`;
@@ -600,45 +587,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         modalMetrics.textContent = metricsText;
 
-        modal.style.display = 'flex';
+        trialModal.style.display = 'flex';
     }
 
-    closeModal.addEventListener('click', () => {
-        modal.style.display = 'none';
+    closeTrialModalBtn.addEventListener('click', () => {
+        trialModal.style.display = 'none';
     });
 
-    window.onclick = (event) => {
-        if (event.target == modal) {
-            modal.style.display = 'none';
-        }
-    };
+    trialModal.addEventListener('click', (e) => {
+        if (e.target === trialModal) trialModal.style.display = 'none';
+    });
 
-    // --- Utility ---
     function setStatus(message, type) {
-        statusText.textContent = message;
-        statusText.className = `status-text ${type}`;
-    }
-
-    function appendLog(message, type = '') {
-        const div = document.createElement('div');
-        div.className = `log-line ${type}`;
-        div.textContent = `> ${message}`;
-        logsDiv.appendChild(div);
-        logsDiv.scrollTop = logsDiv.scrollHeight;
+        statusChip.textContent = message;
+        statusChip.className = 'status-chip';
+        if (type) statusChip.classList.add(type);
     }
 
     function clearTrialList() {
-        trialList.innerHTML = '<div class="trial-placeholder">Trials will appear here</div>';
+        trialList.innerHTML = '<div class="trial-empty">Trials will appear here</div>';
     }
-
-    function clearLogs() {
-        logsDiv.innerHTML = '<div class="log-line info">Waiting for training...</div>';
-    }
-
-
 
     // --- Sidebar & Run Management ---
-
     async function fetchRuns() {
         try {
             const resp = await fetch('/runs');
@@ -650,12 +620,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderSidebar() {
         runListContainer.innerHTML = '';
+        if (runs.length === 0) {
+            runListContainer.innerHTML = '<div class="run-item placeholder">No runs yet</div>';
+            return;
+        }
         runs.forEach(run => {
             const item = document.createElement('div');
             item.className = `run-item ${selectedRunId === run.id ? 'active' : ''}`;
             item.onclick = () => selectRun(run.id);
 
-            // Date formatting
             const date = new Date(run.created_at).toLocaleString('en-US', {
                 month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
             });
@@ -663,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.innerHTML = `
                 <div class="run-status-icon ${run.status}"></div>
                 <div class="run-info">
-                    <span class="run-id">Run #${run.id}</span>
+                    <span class="run-id">${run.config?.project_name || `Run #${run.id}`}</span>
                     <span class="run-date">${date}</span>
                 </div>
             `;
@@ -673,82 +646,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function selectRun(runId) {
         selectedRunId = runId;
-        renderSidebar(); // Update active class
-
-        if (runId === null) {
-            // New Training Mode
-            form.style.display = 'block';
-            summaryDiv.style.display = 'none';
-            resetState();
-            setStatus('Ready', '');
-
-            if (activeRunId) {
-                setStatus(`Run #${activeRunId} is running in background`, 'warning');
-            }
-
-            // Disconnect WS if we are not viewing the active run
-            // Actually, we might want to keep it connected but ignore messages?
-            // Or just close it.
-            if (ws) ws.close();
-            stopBtn.disabled = true;
-        } else {
-            // Viewing a Run
-            await loadRunDetails(runId);
-        }
+        renderSidebar();
+        await loadRunDetails(runId);
     }
 
     async function loadRunDetails(runId) {
         try {
-            // 1. Get Details
             const resp = await fetch(`/runs/${runId}`);
             if (!resp.ok) throw new Error('Run not found');
             const run = await resp.json();
 
-            // 2. Hydrate Form/Summary
-            await restoreFormFromConfig(run.config);
-            updateSummary();
+            // Show summary in sidebar
+            projectSummary.style.display = 'block';
+            updateSummary(run.config);
 
-            // Switch to Summary View
-            form.style.display = 'none';
-            summaryDiv.style.display = 'block';
-
-            // 3. Status & Interactivity
             const isThisActive = (run.status === 'running' || run.status === 'pending');
 
-            if (isThisActive && run.id === activeRunId) {
-                // Active run - show stop, hide delete
+            if (isThisActive) {
+                activeRunId = run.id;
                 stopBtn.style.display = 'inline-block';
                 stopBtn.disabled = false;
-                stopBtn.textContent = 'Stop Training';
+                stopBtn.textContent = 'Stop';
                 deleteBtn.style.display = 'none';
-
-                setStatus('Training in progress...', 'running');
-                connectWebSocket();
+                setStatus('Running...', 'running');
+                setSummaryStatus('Running', 'running');
+                await connectWebSocket();
             } else {
-                // Historical run - hide stop, show delete
                 stopBtn.style.display = 'none';
                 deleteBtn.style.display = 'inline-block';
-
-                setStatus(`Run #${runId}: ${run.status}`, run.status);
+                const statusText = run.status.charAt(0).toUpperCase() + run.status.slice(1);
+                setStatus(statusText, run.status);
+                setSummaryStatus(statusText, run.status);
                 if (ws && ws.readyState === WebSocket.OPEN && selectedRunId !== activeRunId) {
                     ws.close();
                 }
             }
 
-            // 4. Load Trials & Chart
             await fetchAndDisplayRunTrials(runId);
-
         } catch (e) { console.error(e); }
     }
 
     async function fetchAndDisplayRunTrials(runId) {
-        resetState();
+        resetMonitorState();
         try {
             const resp = await fetch(`/runs/${runId}/trials`);
             const data = await resp.json();
 
-            if (data.trials) {
-                // Collect metrics first
+            if (data.trials && data.trials.length > 0) {
                 data.trials.forEach(t => {
                     if (t.user_attrs) {
                         Object.keys(t.user_attrs).forEach(k => {
@@ -766,19 +710,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         metrics: t.user_attrs || {},
                         best_params: null
                     };
-                    // Manually inject 'metrics' key if not present in original addTrial logic
-                    // My previous addTrial logic expected `data` from WS which had `value`, `params` etc.
-                    // My `addTrial` wrapper inside `fetchAndDisplayStudy` did mapping.
-                    // I should reuse `addTrial` but it pushes to `trials` global list which is fine.
-                    // But `addTrial` calls `updateChart` on every push. That's slow for bulk load.
-                    // Better to just push to trials and update chart once?
-                    // For now reusing `addTrial` is simpler code-wise even if slower.
-
-                    // Actually `fetchAndDisplayStudy` logic was good. Let's copy it.
                     addTrial(trialObj);
                 });
 
-                // Best Value update (addTrial handles it incrementally, but we can double check)
                 if (data.best_value !== undefined) {
                     bestValue = data.best_value;
                     bestScore.textContent = bestValue ? bestValue.toFixed(6) : '--';
@@ -790,35 +724,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { console.error(e); }
     }
 
-    // --- Auto Load Current Study ---
     async function checkCurrentStudy() {
-        // First, fetch list of runs
         await fetchRuns();
 
-        // Check for ACTIVE run
         try {
             const resp = await fetch('/active_run_id');
             const data = await resp.json();
 
             if (data.active_run_id) {
                 activeRunId = data.active_run_id;
-                // If we have an active run, select it by default
-                selectRun(activeRunId);
+                await selectRun(activeRunId);
             } else {
                 activeRunId = null;
-                // If no active run, default to "New Training"
-                selectRun(null);
+                // Select first run if exists, otherwise show empty state
+                if (runs.length > 0) {
+                    await selectRun(runs[0].id);
+                } else {
+                    projectSummary.style.display = 'none';
+                }
             }
         } catch (e) {
             console.error('Error checking status:', e);
-            selectRun(null);
+            if (runs.length > 0) {
+                await selectRun(runs[0].id);
+            }
         }
     }
 
     // Initialize
     initChart();
-    // connectWebSocket(); // Don't auto connect globally anymore, selectRun handles it
     checkCurrentStudy();
-
-    newTrainingBtn.addEventListener('click', () => selectRun(null));
 });
