@@ -158,11 +158,11 @@ class TestSplitterWithSampleData:
 
     @pytest.fixture
     def binary_sample_file(self):
-        return "data_samples/binary_classification.csv"
+        return "data_samples/full_data/binary_classification.csv"
 
     @pytest.fixture
     def regression_sample_file(self):
-        return "data_samples/single_column_regression.csv"
+        return "data_samples/full_data/single_column_regression.csv"
 
     def test_split_real_binary_data(self, binary_sample_file, temp_dir):
         """Test splitting real binary classification sample data."""

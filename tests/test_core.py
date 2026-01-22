@@ -377,3 +377,356 @@ class TestVespaTuneFeatures:
         vtune._process_data()
 
         assert vtune.model_config.categorical_features == ["cat_feature"]
+
+
+# ============================================================================
+# Real Data Tests - VespaTune Integration
+# ============================================================================
+
+
+class TestVespaTuneRealDataBinaryClassification:
+    """Test VespaTune with real binary classification data."""
+
+    @pytest.mark.slow
+    def test_train_xgboost_real_data(self, real_binary_classification_data):
+        """Test full training pipeline with XGBoost on real binary classification data."""
+        data = real_binary_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_xgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="xgboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+        assert os.path.exists(os.path.join(output_dir, "vtune.best_params"))
+
+    @pytest.mark.slow
+    def test_train_lightgbm_real_data(self, real_binary_classification_data):
+        """Test full training pipeline with LightGBM on real binary classification data."""
+        data = real_binary_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_lgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="lightgbm",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    @pytest.mark.slow
+    def test_train_catboost_real_data(self, real_binary_classification_data):
+        """Test full training pipeline with CatBoost on real binary classification data."""
+        data = real_binary_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_cb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="catboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+
+class TestVespaTuneRealDataMultiClassClassification:
+    """Test VespaTune with real multi-class classification data."""
+
+    @pytest.mark.slow
+    def test_train_xgboost_multiclass_real_data(self, real_multi_class_classification_data):
+        """Test full training pipeline with XGBoost on real multi-class data."""
+        data = real_multi_class_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_xgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="xgboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    @pytest.mark.slow
+    def test_train_lightgbm_multiclass_real_data(self, real_multi_class_classification_data):
+        """Test full training pipeline with LightGBM on real multi-class data."""
+        data = real_multi_class_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_lgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="lightgbm",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    @pytest.mark.slow
+    def test_train_catboost_multiclass_real_data(self, real_multi_class_classification_data):
+        """Test full training pipeline with CatBoost on real multi-class data."""
+        data = real_multi_class_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_cb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="catboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+
+class TestVespaTuneRealDataRegression:
+    """Test VespaTune with real regression data."""
+
+    @pytest.mark.slow
+    def test_train_xgboost_regression_real_data(self, real_single_column_regression_data):
+        """Test full training pipeline with XGBoost on real regression data."""
+        data = real_single_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_xgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="xgboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    @pytest.mark.slow
+    def test_train_lightgbm_regression_real_data(self, real_single_column_regression_data):
+        """Test full training pipeline with LightGBM on real regression data."""
+        data = real_single_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_lgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="lightgbm",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    @pytest.mark.slow
+    def test_train_catboost_regression_real_data(self, real_single_column_regression_data):
+        """Test full training pipeline with CatBoost on real regression data."""
+        data = real_single_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_cb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="catboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+
+class TestVespaTuneRealDataMultiColumnRegression:
+    """Test VespaTune with real multi-column regression data."""
+
+    @pytest.mark.slow
+    def test_train_xgboost_multi_regression_real_data(self, real_multi_column_regression_data):
+        """Test full training pipeline with XGBoost on real multi-target regression data."""
+        data = real_multi_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_xgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="xgboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])
+
+    @pytest.mark.slow
+    def test_train_lightgbm_multi_regression_real_data(self, real_multi_column_regression_data):
+        """Test full training pipeline with LightGBM on real multi-target regression data."""
+        data = real_multi_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_lgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="lightgbm",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])
+
+    @pytest.mark.slow
+    def test_train_catboost_multi_regression_real_data(self, real_multi_column_regression_data):
+        """Test full training pipeline with CatBoost on real multi-target regression data."""
+        data = real_multi_column_regression_data
+        output_dir = os.path.join(data["temp_dir"], "output_cb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="catboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])
+
+
+class TestVespaTuneRealDataMultiLabelClassification:
+    """Test VespaTune with real multi-label classification data."""
+
+    @pytest.mark.slow
+    def test_train_xgboost_multilabel_real_data(self, real_multi_label_classification_data):
+        """Test full training pipeline with XGBoost on real multi-label data."""
+        data = real_multi_label_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_xgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="xgboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])
+
+    @pytest.mark.slow
+    def test_train_lightgbm_multilabel_real_data(self, real_multi_label_classification_data):
+        """Test full training pipeline with LightGBM on real multi-label data."""
+        data = real_multi_label_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_lgb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="lightgbm",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])
+
+    @pytest.mark.slow
+    def test_train_catboost_multilabel_real_data(self, real_multi_label_classification_data):
+        """Test full training pipeline with CatBoost on real multi-label data."""
+        data = real_multi_label_classification_data
+        output_dir = os.path.join(data["temp_dir"], "output_cb")
+
+        vtune = VespaTune(
+            train_filename=data["train_path"],
+            valid_filename=data["valid_path"],
+            output=output_dir,
+            targets=data["targets"],
+            task=data["task"],
+            model_type="catboost",
+            num_trials=2,
+            time_limit=60,
+        )
+
+        vtune.train()
+
+        model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
+        assert isinstance(model, list)
+        assert len(model) == len(data["targets"])

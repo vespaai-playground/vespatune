@@ -117,7 +117,7 @@ class XGBoostModel(BaseModel):
         early_stopping_rounds = params.pop("early_stopping_rounds", 100)
 
         # Create model based on problem type
-        if self.problem_type in ("binary_classification", "multi_class_classification"):
+        if self.problem_type in ("binary_classification", "multi_class_classification", "multi_label_classification"):
             self.model = xgb.XGBClassifier(**params, early_stopping_rounds=early_stopping_rounds)
         else:
             self.model = xgb.XGBRegressor(**params, early_stopping_rounds=early_stopping_rounds)

@@ -55,14 +55,14 @@ class CatBoostModel(BaseModel):
         if grow_policy == "Lossguide":
             params["max_leaves"] = trial.suggest_int("max_leaves", 16, 64)
 
-        # Feature sampling
-        params["rsm"] = trial.suggest_float("rsm", 0.3, 1.0)  # colsample_bylevel equivalent
-
         # GPU settings
         if model_config.use_gpu:
             params["task_type"] = "GPU"
+            # rsm is not supported on GPU for non-pairwise modes, so skip it
         else:
             params["task_type"] = "CPU"
+            # Feature sampling (only on CPU, not supported on GPU for non-pairwise modes)
+            params["rsm"] = trial.suggest_float("rsm", 0.3, 1.0)  # colsample_bylevel equivalent
 
         # Leaf estimation
         params["leaf_estimation_iterations"] = trial.suggest_int("leaf_estimation_iterations", 1, 10)
@@ -136,7 +136,7 @@ class CatBoostModel(BaseModel):
         valid_pool = Pool(X_valid, y_valid, cat_features=categorical_features)
 
         # Create model based on problem type
-        if self.problem_type in ("binary_classification", "multi_class_classification"):
+        if self.problem_type in ("binary_classification", "multi_class_classification", "multi_label_classification"):
             self.model = CatBoostClassifier(**params)
         else:
             self.model = CatBoostRegressor(**params)
@@ -154,7 +154,8 @@ class CatBoostModel(BaseModel):
             return X
         X_df = pd.DataFrame(X)
         for idx in self._cat_features:
-            X_df[idx] = X_df[idx].astype(np.int32)
+            # Fill NaN with -1 before converting to int (CatBoost handles -1 as missing)
+            X_df[idx] = X_df[idx].fillna(-1).astype(np.int32)
         return X_df
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -189,7 +190,7 @@ class CatBoostModel(BaseModel):
         """Load model from CatBoost native format."""
         from catboost import CatBoostClassifier, CatBoostRegressor
 
-        if self.problem_type in ("binary_classification", "multi_class_classification"):
+        if self.problem_type in ("binary_classification", "multi_class_classification", "multi_label_classification"):
             self.model = CatBoostClassifier()
         else:
             self.model = CatBoostRegressor()

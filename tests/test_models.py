@@ -333,3 +333,352 @@ class TestGetParams:
 
         model.get_params(trial, model_config)
         assert trial.suggest_float.called or trial.suggest_int.called
+
+
+# ============================================================================
+# Real Data Tests - Binary Classification
+# ============================================================================
+
+
+class TestRealDataBinaryClassification:
+    """Test all models with real binary classification data."""
+
+    @pytest.fixture
+    def real_data(self, real_binary_classification_data):
+        """Prepare real data for model training."""
+        data = real_binary_classification_data
+        train_df = data["train_df"]
+        valid_df = data["valid_df"]
+
+        # Get numeric features only for simplicity
+        numeric_cols = train_df.select_dtypes(include=[np.number]).columns.tolist()
+        feature_cols = [c for c in numeric_cols if c not in ["id", "income"]]
+
+        X_train = train_df[feature_cols].values.astype(np.float32)
+        X_valid = valid_df[feature_cols].values.astype(np.float32)
+
+        # Encode target
+        from sklearn.preprocessing import LabelEncoder
+
+        le = LabelEncoder()
+        y_train = le.fit_transform(train_df["income"].values)
+        y_valid = le.transform(valid_df["income"].values)
+
+        return X_train, y_train, X_valid, y_valid, len(feature_cols)
+
+    def test_xgboost_binary_real_data(self, real_data):
+        """Test XGBoost with real binary classification data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = XGBoostModel(problem_type="binary_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_lightgbm_binary_real_data(self, real_data):
+        """Test LightGBM with real binary classification data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = LightGBMModel(problem_type="binary_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_catboost_binary_real_data(self, real_data):
+        """Test CatBoost with real binary classification data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = CatBoostModel(problem_type="binary_classification", random_state=42)
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+
+# ============================================================================
+# Real Data Tests - Multi-Class Classification
+# ============================================================================
+
+
+class TestRealDataMultiClassClassification:
+    """Test all models with real multi-class classification data (Iris)."""
+
+    @pytest.fixture
+    def real_data(self, real_multi_class_classification_data):
+        """Prepare real data for model training."""
+        data = real_multi_class_classification_data
+        train_df = data["train_df"]
+        valid_df = data["valid_df"]
+
+        feature_cols = [c for c in train_df.columns if c not in ["id", "target"]]
+
+        X_train = train_df[feature_cols].values.astype(np.float32)
+        X_valid = valid_df[feature_cols].values.astype(np.float32)
+
+        # Encode target
+        from sklearn.preprocessing import LabelEncoder
+
+        le = LabelEncoder()
+        y_train = le.fit_transform(train_df["target"].values)
+        y_valid = le.transform(valid_df["target"].values)
+        n_classes = len(le.classes_)
+
+        return X_train, y_train, X_valid, y_valid, len(feature_cols), n_classes
+
+    def test_xgboost_multiclass_real_data(self, real_data):
+        """Test XGBoost with real multi-class classification data."""
+        X_train, y_train, X_valid, y_valid, n_features, n_classes = real_data
+        model = XGBoostModel(problem_type="multi_class_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), n_classes)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_lightgbm_multiclass_real_data(self, real_data):
+        """Test LightGBM with real multi-class classification data."""
+        X_train, y_train, X_valid, y_valid, n_features, n_classes = real_data
+        model = LightGBMModel(problem_type="multi_class_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1, "num_class": n_classes}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), n_classes)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_catboost_multiclass_real_data(self, real_data):
+        """Test CatBoost with real multi-class classification data."""
+        X_train, y_train, X_valid, y_valid, n_features, n_classes = real_data
+        model = CatBoostModel(problem_type="multi_class_classification", random_state=42)
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        # CatBoost predict returns (n_samples, 1) for multiclass, flatten it
+        predictions = predictions.ravel()
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), n_classes)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+
+# ============================================================================
+# Real Data Tests - Single Column Regression
+# ============================================================================
+
+
+class TestRealDataSingleColumnRegression:
+    """Test all models with real single column regression data."""
+
+    @pytest.fixture
+    def real_data(self, real_single_column_regression_data):
+        """Prepare real data for model training."""
+        data = real_single_column_regression_data
+        train_df = data["train_df"]
+        valid_df = data["valid_df"]
+
+        # Get numeric features only
+        numeric_cols = train_df.select_dtypes(include=[np.number]).columns.tolist()
+        feature_cols = [c for c in numeric_cols if c not in ["id", "target"]]
+
+        X_train = train_df[feature_cols].values.astype(np.float32)
+        X_valid = valid_df[feature_cols].values.astype(np.float32)
+        y_train = train_df["target"].values.astype(np.float32)
+        y_valid = valid_df["target"].values.astype(np.float32)
+
+        return X_train, y_train, X_valid, y_valid, len(feature_cols)
+
+    def test_xgboost_regression_real_data(self, real_data):
+        """Test XGBoost with real regression data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = XGBoostModel(problem_type="single_column_regression", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+
+    def test_lightgbm_regression_real_data(self, real_data):
+        """Test LightGBM with real regression data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = LightGBMModel(problem_type="single_column_regression", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+
+    def test_catboost_regression_real_data(self, real_data):
+        """Test CatBoost with real regression data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = CatBoostModel(problem_type="single_column_regression", random_state=42)
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+
+
+# ============================================================================
+# Real Data Tests - Multi-Column Regression
+# ============================================================================
+
+
+class TestRealDataMultiColumnRegression:
+    """Test all models with real multi-column regression data."""
+
+    @pytest.fixture
+    def real_data(self, real_multi_column_regression_data):
+        """Prepare real data for model training."""
+        data = real_multi_column_regression_data
+        train_df = data["train_df"]
+        valid_df = data["valid_df"]
+        target_cols = data["targets"]
+
+        # Get numeric features only
+        numeric_cols = train_df.select_dtypes(include=[np.number]).columns.tolist()
+        feature_cols = [c for c in numeric_cols if c not in ["id"] + target_cols]
+
+        X_train = train_df[feature_cols].values.astype(np.float32)
+        X_valid = valid_df[feature_cols].values.astype(np.float32)
+        y_train = train_df[target_cols].values.astype(np.float32)
+        y_valid = valid_df[target_cols].values.astype(np.float32)
+
+        return X_train, y_train, X_valid, y_valid, len(feature_cols), len(target_cols)
+
+    def test_xgboost_multi_regression_real_data(self, real_data):
+        """Test XGBoost with real multi-column regression data (one model per target)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_targets = real_data
+
+        for idx in range(n_targets):
+            model = XGBoostModel(problem_type="multi_column_regression", random_state=42)
+            params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+
+    def test_lightgbm_multi_regression_real_data(self, real_data):
+        """Test LightGBM with real multi-column regression data (one model per target)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_targets = real_data
+
+        for idx in range(n_targets):
+            model = LightGBMModel(problem_type="multi_column_regression", random_state=42)
+            params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+
+    def test_catboost_multi_regression_real_data(self, real_data):
+        """Test CatBoost with real multi-column regression data (one model per target)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_targets = real_data
+
+        for idx in range(n_targets):
+            model = CatBoostModel(problem_type="multi_column_regression", random_state=42)
+            params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+
+
+# ============================================================================
+# Real Data Tests - Multi-Label Classification
+# ============================================================================
+
+
+class TestRealDataMultiLabelClassification:
+    """Test all models with real multi-label classification data."""
+
+    @pytest.fixture
+    def real_data(self, real_multi_label_classification_data):
+        """Prepare real data for model training."""
+        data = real_multi_label_classification_data
+        train_df = data["train_df"]
+        valid_df = data["valid_df"]
+        target_cols = data["targets"]
+
+        # Get numeric features only
+        numeric_cols = train_df.select_dtypes(include=[np.number]).columns.tolist()
+        feature_cols = [c for c in numeric_cols if c not in ["id"] + target_cols]
+
+        X_train = train_df[feature_cols].values.astype(np.float32)
+        X_valid = valid_df[feature_cols].values.astype(np.float32)
+        y_train = train_df[target_cols].values.astype(np.int32)
+        y_valid = valid_df[target_cols].values.astype(np.int32)
+
+        return X_train, y_train, X_valid, y_valid, len(feature_cols), len(target_cols)
+
+    def test_xgboost_multilabel_real_data(self, real_data):
+        """Test XGBoost with real multi-label classification data (one model per label)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_labels = real_data
+
+        for idx in range(n_labels):
+            model = XGBoostModel(problem_type="multi_label_classification", random_state=42)
+            params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+            proba = model.predict_proba(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+            assert proba.shape == (len(y_valid), 2)
+
+    def test_lightgbm_multilabel_real_data(self, real_data):
+        """Test LightGBM with real multi-label classification data (one model per label)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_labels = real_data
+
+        for idx in range(n_labels):
+            model = LightGBMModel(problem_type="multi_label_classification", random_state=42)
+            params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+            proba = model.predict_proba(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+            assert proba.shape == (len(y_valid), 2)
+
+    def test_catboost_multilabel_real_data(self, real_data):
+        """Test CatBoost with real multi-label classification data (one model per label)."""
+        X_train, y_train, X_valid, y_valid, n_features, n_labels = real_data
+
+        for idx in range(n_labels):
+            model = CatBoostModel(problem_type="multi_label_classification", random_state=42)
+            params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+            model.fit(X_train, y_train[:, idx], X_valid, y_valid[:, idx], params)
+            predictions = model.predict(X_valid)
+            proba = model.predict_proba(X_valid)
+
+            assert predictions.shape == (len(y_valid),)
+            assert proba.shape == (len(y_valid), 2)

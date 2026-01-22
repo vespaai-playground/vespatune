@@ -217,3 +217,178 @@ def regression_data_file(temp_dir):
         "temp_dir": temp_dir,
         "n_samples": n_samples,
     }
+
+
+# ============================================================================
+# Real data fixtures using data_samples
+# ============================================================================
+
+DATA_SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "..", "data_samples")
+
+
+@pytest.fixture
+def real_binary_classification_data(temp_dir):
+    """Load real binary classification data from data_samples."""
+    train_path = os.path.join(DATA_SAMPLES_DIR, "binary_classification", "train_fold_0.csv")
+    valid_path = os.path.join(DATA_SAMPLES_DIR, "binary_classification", "valid_fold_0.csv")
+
+    if not os.path.exists(train_path):
+        pytest.skip("Binary classification sample data not available")
+
+    # Load only first 100 rows for faster tests
+    train_df = pd.read_csv(train_path, nrows=100)
+    valid_df = pd.read_csv(valid_path, nrows=30)
+
+    # Add id column if not present
+    if "id" not in train_df.columns:
+        train_df.insert(0, "id", range(len(train_df)))
+        valid_df.insert(0, "id", range(len(train_df), len(train_df) + len(valid_df)))
+
+    # Save to temp dir
+    train_out = os.path.join(temp_dir, "train.csv")
+    valid_out = os.path.join(temp_dir, "valid.csv")
+    train_df.to_csv(train_out, index=False)
+    valid_df.to_csv(valid_out, index=False)
+
+    # Identify features and target
+    target_col = "income"
+    feature_cols = [c for c in train_df.columns if c not in ["id", target_col]]
+
+    return {
+        "train_path": train_out,
+        "valid_path": valid_out,
+        "temp_dir": temp_dir,
+        "targets": [target_col],
+        "features": feature_cols,
+        "task": "classification",
+        "train_df": train_df,
+        "valid_df": valid_df,
+    }
+
+
+@pytest.fixture
+def real_multi_class_classification_data(temp_dir):
+    """Load real multi-class classification data from data_samples (Iris dataset)."""
+    train_path = os.path.join(DATA_SAMPLES_DIR, "multi_class_classification", "train_fold_0.csv")
+    valid_path = os.path.join(DATA_SAMPLES_DIR, "multi_class_classification", "valid_fold_0.csv")
+
+    if not os.path.exists(train_path):
+        pytest.skip("Multi-class classification sample data not available")
+
+    train_df = pd.read_csv(train_path, nrows=100)
+    valid_df = pd.read_csv(valid_path, nrows=30)
+
+    train_out = os.path.join(temp_dir, "train.csv")
+    valid_out = os.path.join(temp_dir, "valid.csv")
+    train_df.to_csv(train_out, index=False)
+    valid_df.to_csv(valid_out, index=False)
+
+    target_col = "target"
+    feature_cols = [c for c in train_df.columns if c not in ["id", target_col]]
+
+    return {
+        "train_path": train_out,
+        "valid_path": valid_out,
+        "temp_dir": temp_dir,
+        "targets": [target_col],
+        "features": feature_cols,
+        "task": "classification",
+        "train_df": train_df,
+        "valid_df": valid_df,
+    }
+
+
+@pytest.fixture
+def real_single_column_regression_data(temp_dir):
+    """Load real single column regression data from data_samples."""
+    train_path = os.path.join(DATA_SAMPLES_DIR, "single_column_regression", "train_fold_0.csv")
+    valid_path = os.path.join(DATA_SAMPLES_DIR, "single_column_regression", "valid_fold_0.csv")
+
+    if not os.path.exists(train_path):
+        pytest.skip("Single column regression sample data not available")
+
+    train_df = pd.read_csv(train_path, nrows=100)
+    valid_df = pd.read_csv(valid_path, nrows=30)
+
+    train_out = os.path.join(temp_dir, "train.csv")
+    valid_out = os.path.join(temp_dir, "valid.csv")
+    train_df.to_csv(train_out, index=False)
+    valid_df.to_csv(valid_out, index=False)
+
+    target_col = "target"
+    feature_cols = [c for c in train_df.columns if c not in ["id", target_col]]
+
+    return {
+        "train_path": train_out,
+        "valid_path": valid_out,
+        "temp_dir": temp_dir,
+        "targets": [target_col],
+        "features": feature_cols,
+        "task": "regression",
+        "train_df": train_df,
+        "valid_df": valid_df,
+    }
+
+
+@pytest.fixture
+def real_multi_column_regression_data(temp_dir):
+    """Load real multi-column regression data from data_samples."""
+    train_path = os.path.join(DATA_SAMPLES_DIR, "multi_column_regression", "train_fold_0.csv")
+    valid_path = os.path.join(DATA_SAMPLES_DIR, "multi_column_regression", "valid_fold_0.csv")
+
+    if not os.path.exists(train_path):
+        pytest.skip("Multi-column regression sample data not available")
+
+    train_df = pd.read_csv(train_path, nrows=100)
+    valid_df = pd.read_csv(valid_path, nrows=30)
+
+    train_out = os.path.join(temp_dir, "train.csv")
+    valid_out = os.path.join(temp_dir, "valid.csv")
+    train_df.to_csv(train_out, index=False)
+    valid_df.to_csv(valid_out, index=False)
+
+    target_cols = ["target1", "target2", "target3"]
+    feature_cols = [c for c in train_df.columns if c not in ["id"] + target_cols]
+
+    return {
+        "train_path": train_out,
+        "valid_path": valid_out,
+        "temp_dir": temp_dir,
+        "targets": target_cols,
+        "features": feature_cols,
+        "task": "regression",
+        "train_df": train_df,
+        "valid_df": valid_df,
+    }
+
+
+@pytest.fixture
+def real_multi_label_classification_data(temp_dir):
+    """Load real multi-label classification data from data_samples."""
+    train_path = os.path.join(DATA_SAMPLES_DIR, "multi_label_classification", "train_fold_0.csv")
+    valid_path = os.path.join(DATA_SAMPLES_DIR, "multi_label_classification", "valid_fold_0.csv")
+
+    if not os.path.exists(train_path):
+        pytest.skip("Multi-label classification sample data not available")
+
+    train_df = pd.read_csv(train_path, nrows=100)
+    valid_df = pd.read_csv(valid_path, nrows=30)
+
+    train_out = os.path.join(temp_dir, "train.csv")
+    valid_out = os.path.join(temp_dir, "valid.csv")
+    train_df.to_csv(train_out, index=False)
+    valid_df.to_csv(valid_out, index=False)
+
+    target_cols = ["service_a", "service_b"]
+    feature_cols = [c for c in train_df.columns if c not in ["id"] + target_cols]
+
+    return {
+        "train_path": train_out,
+        "valid_path": valid_out,
+        "temp_dir": temp_dir,
+        "targets": target_cols,
+        "features": feature_cols,
+        "task": "classification",
+        "train_df": train_df,
+        "valid_df": valid_df,
+    }

@@ -132,7 +132,7 @@ class LightGBMModel(BaseModel):
             callbacks.append(lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False))
 
         # Create model based on problem type
-        if self.problem_type in ("binary_classification", "multi_class_classification"):
+        if self.problem_type in ("binary_classification", "multi_class_classification", "multi_label_classification"):
             self.model = lgb.LGBMClassifier(**params)
         else:
             self.model = lgb.LGBMRegressor(**params)
