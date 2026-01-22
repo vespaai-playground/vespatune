@@ -109,7 +109,7 @@ The web interface provides:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `model_type` | `"xgboost"` | Model to use: `"xgboost"`, `"lightgbm"`, or `"catboost"` |
+| `model_type` | `"xgboost"` | Model to use: `"xgboost"`, `"lightgbm"`, `"catboost"`, or `"logreg"` |
 | `test_filename` | `None` | Path to test CSV file (predictions saved if provided) |
 | `task` | `None` | `"classification"` or `"regression"` (auto-detected if not specified) |
 | `idx` | `"id"` | Name of the ID column |
@@ -137,6 +137,11 @@ The web interface provides:
 - Best native categorical feature handling
 - Robust to overfitting
 - Supports GPU acceleration
+
+### Logistic Regression
+- Linear model for classification tasks only
+- Searches over preprocessing (imputation, scaling) and regularization
+- Fast training, interpretable coefficients
 
 ## Data Splitting
 
@@ -177,7 +182,12 @@ This creates `fold_0_train.csv`, `fold_0_valid.csv`, etc. for k-fold cross-valid
 from vespatune import VespaTunePredict
 
 predictor = VespaTunePredict(model_path="outputs/my_model")
-predictions = predictor.predict_file("test.csv")
+
+# Predict on file
+predictor.predict_file("test.csv", "predictions.csv")
+
+# Predict single sample
+prediction = predictor.predict_single({"feature1": 1.0, "feature2": "A"})
 ```
 
 ### Using ONNX model
@@ -186,7 +196,40 @@ predictions = predictor.predict_file("test.csv")
 from vespatune import VespaTuneONNXPredict
 
 predictor = VespaTuneONNXPredict(model_path="onnx_model/")
-predictions = predictor.predict_file("test.csv")
+
+# Predict on file
+predictor.predict_file("test.csv", "predictions.csv")
+
+# Predict single sample
+prediction = predictor.predict_single({"feature1": 1.0, "feature2": "A"})
+```
+
+### Standalone Preprocessing
+
+Use `VespaTuneProcessor` when you want to preprocess data independently and pass it to an external ONNX runtime or inference system:
+
+```python
+from vespatune import VespaTuneProcessor
+import onnxruntime as ort
+
+# Load preprocessor from model or ONNX export directory
+processor = VespaTuneProcessor(model_path="outputs/my_model")
+
+# Transform DataFrame
+processed = processor.transform(df)  # Returns float32 numpy array
+
+# Transform single sample
+processed = processor.transform_single({"feature1": 1.0, "feature2": "A"})
+
+# Get feature metadata
+processor.get_feature_names()        # Input feature names
+processor.get_categorical_features() # Categorical feature names
+processor.get_feature_names_out()    # Output feature names after transform
+processor.get_input_schema()         # Pydantic schema for API validation
+
+# Pass to ONNX runtime
+session = ort.InferenceSession("model.onnx")
+predictions = session.run(None, {"input": processed})
 ```
 
 ## CLI Reference
@@ -211,7 +254,7 @@ options:
   --train_filename      Path to training file (required)
   --valid_filename      Path to validation file (required)
   --output              Path to output directory (required)
-  --model               Model type: xgboost, lightgbm, catboost (default: xgboost)
+  --model               Model type: xgboost, lightgbm, catboost, logreg (default: xgboost)
   --test_filename       Path to test file
   --task                Task type: classification, regression
   --idx                 ID column name
@@ -279,7 +322,7 @@ After training, the following files are created in the output directory:
 | `vtune_model.final` | Trained model |
 | `vtune.config` | Model configuration |
 | `vtune.best_params` | Best hyperparameters from Optuna |
-| `vtune.categorical_encoder` | Categorical feature encoder |
+| `vtune.preprocessor.joblib` | Fitted preprocessor (encoding, scaling, imputation) |
 | `vtune.target_encoder` | Target encoder (for classification) |
 | `params.db` | Optuna study database |
 | `train.feather` | Processed training data |

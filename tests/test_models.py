@@ -355,6 +355,32 @@ class TestLogRegModel:
 
         assert predictions.shape == (20,)
 
+    def test_fit_with_flattened_params(self, logreg_model, sample_data):
+        """Test that fit works with flattened params (as returned by Optuna in train_final_model)."""
+        X_train, y_train, X_valid, y_valid = sample_data
+        # Flattened params include preprocessing, HP search control, and model params
+        flattened_params = {
+            # Preprocessing params (should be filtered out)
+            "numeric_impute_strategy": "mean",
+            "categorical_impute_strategy": None,
+            "scaler": "minmax",
+            # HP search control params (should be filtered out)
+            "use_regularization": False,
+            "solver_none": "saga",
+            # Actual model params
+            "max_iter": 200,
+            "tol": 0.0001,
+            "solver": "saga",
+            "class_weight": None,
+            "random_state": 42,
+            "C": np.inf,
+        }
+
+        logreg_model.fit(X_train, y_train, X_valid, y_valid, flattened_params)
+        predictions = logreg_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+
     def test_multiclass(self):
         model = LogRegModel(problem_type="multi_class_classification", random_state=42)
         np.random.seed(42)

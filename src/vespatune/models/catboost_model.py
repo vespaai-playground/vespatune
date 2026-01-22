@@ -139,20 +139,22 @@ class CatBoostModel(BaseModel):
         """Train CatBoost model."""
         from catboost import CatBoostClassifier, CatBoostRegressor, Pool
 
-        # Extract early stopping rounds
-        early_stopping_rounds = params.pop("early_stopping_rounds", 100)
-        params["early_stopping_rounds"] = early_stopping_rounds
+        params = params.copy()
 
         # Handle Quantile and Huber loss function parameters
         # CatBoost requires these to be embedded in the loss_function string
-        if "quantile" in params:
-            quantile = params.pop("quantile")
-            if params.get("loss_function") == "Quantile":
-                params["loss_function"] = f"Quantile:alpha={quantile}"
-        if "huber_delta" in params:
-            delta = params.pop("huber_delta")
-            if params.get("loss_function") == "Huber":
-                params["loss_function"] = f"Huber:delta={delta}"
+        # Optuna stores raw suggested values, so we need to reconstruct the full string
+        quantile = params.pop("quantile", None)
+        huber_delta = params.pop("huber_delta", None)
+
+        if params.get("loss_function") == "Quantile" and quantile is not None:
+            params["loss_function"] = f"Quantile:alpha={quantile}"
+        elif params.get("loss_function") == "Huber" and huber_delta is not None:
+            params["loss_function"] = f"Huber:delta={huber_delta}"
+
+        # Extract early stopping rounds
+        early_stopping_rounds = params.pop("early_stopping_rounds", 100)
+        params["early_stopping_rounds"] = early_stopping_rounds
 
         # Store categorical features for use in predict methods
         self._cat_features = categorical_features

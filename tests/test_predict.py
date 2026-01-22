@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import xgboost as xgb
 
-from vespatune import VespaTune, VespaTuneExport, VespaTuneONNXPredict, VespaTunePredict
+from vespatune import VespaTune, VespaTuneExport, VespaTuneONNXPredict, VespaTunePredict, VespaTuneProcessor
 from vespatune.enums import ProblemType
 from vespatune.schemas import ModelConfig
 
@@ -429,3 +429,122 @@ class TestONNXPredictionSchema:
 
         assert schema is not None
         assert hasattr(schema, "model_fields")
+
+
+# VespaTuneProcessor Tests
+
+
+class TestVespaTuneProcessorInit:
+    def test_init_from_model_dir(self, onnx_binary_model):
+        """Test loading processor from model directory (with vtune.config)."""
+        # onnx_binary_model fixture creates both model dir and onnx dir
+        # The model dir has vtune.config
+        model_dir = os.path.dirname(onnx_binary_model["onnx_path"])
+        model_dir = os.path.join(model_dir, "trained_model")
+
+        processor = VespaTuneProcessor(model_path=model_dir)
+
+        assert processor.features is not None
+        assert processor.preprocessor is not None
+
+    def test_init_from_onnx_dir(self, onnx_binary_model):
+        """Test loading processor from ONNX export directory (with metadata.json)."""
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        assert processor.features == onnx_binary_model["features"]
+        assert processor.preprocessor is not None
+        assert processor.problem_type == "binary_classification"
+
+    def test_init_invalid_path(self, tmp_path):
+        """Test that invalid path raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            VespaTuneProcessor(model_path=str(tmp_path))
+
+
+class TestVespaTuneProcessorTransform:
+    def test_transform_dataframe(self, onnx_binary_model):
+        """Test transforming a DataFrame."""
+        import numpy as np
+
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        test_df = pd.read_csv(onnx_binary_model["test_path"])
+        processed = processor.transform(test_df)
+
+        assert isinstance(processed, np.ndarray)
+        assert processed.dtype == np.float32
+        assert processed.shape[0] == len(test_df)
+
+    def test_transform_single(self, onnx_binary_model):
+        """Test transforming a single sample."""
+        import numpy as np
+
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        sample = {"feature1": 0.5, "feature2": -0.3, "feature3": 1.2}
+        processed = processor.transform_single(sample)
+
+        assert isinstance(processed, np.ndarray)
+        assert processed.dtype == np.float32
+        assert processed.shape[0] == 1
+
+
+class TestVespaTuneProcessorMetadata:
+    def test_get_feature_names(self, onnx_binary_model):
+        """Test getting input feature names."""
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        features = processor.get_feature_names()
+
+        assert features == onnx_binary_model["features"]
+
+    def test_get_categorical_features(self, onnx_binary_model):
+        """Test getting categorical feature names."""
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        cat_features = processor.get_categorical_features()
+
+        assert isinstance(cat_features, list)
+
+    def test_get_feature_names_out(self, onnx_binary_model):
+        """Test getting output feature names after transformation."""
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        features_out = processor.get_feature_names_out()
+
+        assert isinstance(features_out, list)
+        assert len(features_out) > 0
+
+    def test_get_input_schema(self, onnx_binary_model):
+        """Test getting Pydantic input schema."""
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        schema = processor.get_input_schema()
+
+        assert schema is not None
+        assert hasattr(schema, "model_fields")
+        for feat in onnx_binary_model["features"]:
+            assert feat in schema.model_fields
+
+
+class TestVespaTuneProcessorIntegration:
+    def test_processor_output_matches_onnx_input(self, onnx_binary_model):
+        """Test that processor output can be passed directly to ONNX runtime."""
+        import onnxruntime as ort
+
+        processor = VespaTuneProcessor(model_path=onnx_binary_model["onnx_path"])
+
+        # Transform test data
+        test_df = pd.read_csv(onnx_binary_model["test_path"])
+        processed = processor.transform(test_df)
+
+        # Load ONNX model and run inference
+        onnx_path = os.path.join(onnx_binary_model["onnx_path"], "model.onnx")
+        session = ort.InferenceSession(onnx_path)
+        input_name = session.get_inputs()[0].name
+
+        # This should not raise an error
+        outputs = session.run(None, {input_name: processed})
+
+        assert outputs is not None
+        assert len(outputs) > 0
