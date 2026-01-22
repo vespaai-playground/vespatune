@@ -63,9 +63,14 @@
     --radius-lg: 13px;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
-html, body {
+html,
+body {
     height: 100%;
     overflow: hidden;
     font-family: var(--font);
@@ -189,12 +194,24 @@ html, body {
     animation: pulse 1.5s infinite;
 }
 
-.run-status-icon.completed { background: var(--success); }
-.run-status-icon.error { background: var(--danger); }
+.run-status-icon.completed {
+    background: var(--success);
+}
+
+.run-status-icon.error {
+    background: var(--danger);
+}
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
 }
 
 .run-info {
@@ -260,7 +277,9 @@ html, body {
     border-bottom: 1px solid var(--subtle-border);
 }
 
-.summary-row:last-child { border-bottom: none; }
+.summary-row:last-child {
+    border-bottom: none;
+}
 
 .summary-key {
     font-size: var(--font-xs);
@@ -443,7 +462,8 @@ html, body {
     height: 200px;
 }
 
-.params-card, .trials-card {
+.params-card,
+.trials-card {
     background: var(--app-background);
     border: 1px solid var(--subtle-border);
     border-radius: var(--radius-sm);
@@ -565,8 +585,15 @@ html, body {
 }
 
 @keyframes modalIn {
-    from { opacity: 0; transform: scale(0.96) translateY(-8px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
 }
 
 .modal-header {
@@ -609,7 +636,9 @@ html, body {
     margin-bottom: var(--space-lg);
 }
 
-.modal-section:last-child { margin-bottom: 0; }
+.modal-section:last-child {
+    margin-bottom: 0;
+}
 
 .modal-section label {
     display: block;
@@ -683,7 +712,9 @@ html, body {
     color: var(--low-contrast-text);
 }
 
-.upload-box.uploaded .upload-icon { color: var(--success); }
+.upload-box.uploaded .upload-icon {
+    color: var(--success);
+}
 
 .upload-text {
     font-size: var(--font-xs);
@@ -706,9 +737,14 @@ html, body {
     margin-bottom: var(--space-sm);
 }
 
-.form-row:last-child { margin-bottom: 0; }
+.form-row:last-child {
+    margin-bottom: 0;
+}
 
-.form-field { display: flex; flex-direction: column; }
+.form-field {
+    display: flex;
+    flex-direction: column;
+}
 
 .form-field.compact label {
     font-size: var(--font-xs);
@@ -739,7 +775,9 @@ html, body {
     user-select: none;
 }
 
-select, input[type="text"], input[type="number"] {
+select,
+input[type="text"],
+input[type="number"] {
     width: 100%;
     padding: var(--space-sm);
     background-color: var(--ui-element-background);
@@ -762,7 +800,8 @@ select {
     cursor: pointer;
 }
 
-select:focus, input:focus {
+select:focus,
+input:focus {
     outline: none;
     border-color: var(--heather-light);
 }

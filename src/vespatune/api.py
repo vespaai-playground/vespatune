@@ -6,41 +6,21 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from typing import List
 
 import optuna
 import pandas as pd
-
-from fastapi import (
-    FastAPI,
-    Request,
-    BackgroundTasks,
-    UploadFile,
-    File,
-    WebSocket,
-    WebSocketDisconnect,
-    HTTPException,
-)
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 
-from .predict import VespaTuneONNXPredict
-from .core import VespaTune
-from .models import list_models
+from .db import create_run, delete_run, get_active_run, get_all_runs, get_run, init_db, update_run_status
 from .enums import TaskType
-from .db import (
-    init_db,
-    create_run,
-    update_run_status,
-    get_run,
-    get_active_run,
-    get_all_runs,
-    delete_run,
-)
+from .models import list_models
+from .predict import VespaTuneONNXPredict
 
 
 # Helper: Check if process is alive
@@ -79,9 +59,7 @@ def recover_stale_runs():
                 update_run_status(run_id, "completed")
                 print(f"Run {run_id}: Marked as completed (final model exists)")
             else:
-                update_run_status(
-                    run_id, "error", error="Process terminated unexpectedly"
-                )
+                update_run_status(run_id, "error", error="Process terminated unexpectedly")
                 print(f"Run {run_id}: Marked as error (no final model)")
 
 
@@ -123,9 +101,7 @@ app.mount(
 )
 
 # Templates
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), "templates")
-)
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 model_path = os.environ.get("VESPATUNE_MODEL_PATH")
 if model_path and os.path.exists(model_path):
@@ -220,9 +196,7 @@ async def monitor_trials(db_path: str, manager: ConnectionManager):
             trials = study.trials
 
             # Filter for completed trials
-            completed_trials = [
-                t for t in trials if t.state == optuna.trial.TrialState.COMPLETE
-            ]
+            completed_trials = [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
             current_count = len(completed_trials)
 
             if current_count > last_trial_count:
@@ -248,9 +222,8 @@ async def monitor_trials(db_path: str, manager: ConnectionManager):
 
             await asyncio.sleep(2)
 
-        except Exception as e:
+        except Exception:
             # Logic to handle race conditions or DB locks
-            # print(f"Monitor error: {e}")
             await asyncio.sleep(2)
 
 
@@ -358,14 +331,8 @@ def get_study(study_name: str, db_path: str):
                         "number": t.number,
                         "value": t.value,
                         "params": t.params,
-                        "datetime_start": (
-                            t.datetime_start.isoformat() if t.datetime_start else None
-                        ),
-                        "datetime_complete": (
-                            t.datetime_complete.isoformat()
-                            if t.datetime_complete
-                            else None
-                        ),
+                        "datetime_start": (t.datetime_start.isoformat() if t.datetime_start else None),
+                        "datetime_complete": (t.datetime_complete.isoformat() if t.datetime_complete else None),
                         "duration": t.duration.total_seconds() if t.duration else None,
                         "user_attrs": t.user_attrs,
                     }
@@ -487,13 +454,15 @@ def get_run_artifacts(run_id: int):
         filepath = os.path.join(output_dir, filename)
         if os.path.exists(filepath):
             size = os.path.getsize(filepath)
-            artifacts.append({
-                "name": filename,
-                "label": label,
-                "category": category,
-                "size": size,
-                "path": filepath,
-            })
+            artifacts.append(
+                {
+                    "name": filename,
+                    "label": label,
+                    "category": category,
+                    "size": size,
+                    "path": filepath,
+                }
+            )
 
     # ONNX artifacts
     onnx_dir = os.path.join(output_dir, "onnx")
@@ -503,13 +472,15 @@ def get_run_artifacts(run_id: int):
             if os.path.isfile(filepath):
                 size = os.path.getsize(filepath)
                 label = "ONNX Model" if filename.endswith(".onnx") else filename
-                artifacts.append({
-                    "name": f"onnx/{filename}",
-                    "label": label,
-                    "category": "onnx",
-                    "size": size,
-                    "path": filepath,
-                })
+                artifacts.append(
+                    {
+                        "name": f"onnx/{filename}",
+                        "label": label,
+                        "category": "onnx",
+                        "size": size,
+                        "path": filepath,
+                    }
+                )
 
     return {"artifacts": artifacts}
 
@@ -586,9 +557,7 @@ async def train(config: TrainRequest):
     # Check if existing run is active
     active = get_active_run()
     if active and active["status"] == "running":
-        return JSONResponse(
-            status_code=400, content={"detail": "Training already in progress"}
-        )
+        return JSONResponse(status_code=400, content={"detail": "Training already in progress"})
 
     # Create output directory in ~/.vespatune/
     base_dir = os.path.expanduser("~/.vespatune")
@@ -631,9 +600,7 @@ async def train(config: TrainRequest):
         return {"message": "Training started", "run_id": run_id, "pid": process.pid}
     except Exception as e:
         update_run_status(run_id, "error", error=str(e))
-        return JSONResponse(
-            status_code=500, content={"detail": f"Failed to spawn worker: {e}"}
-        )
+        return JSONResponse(status_code=500, content={"detail": f"Failed to spawn worker: {e}"})
 
 
 @app.post("/predict")

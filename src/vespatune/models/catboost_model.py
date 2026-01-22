@@ -19,6 +19,7 @@ class CatBoostModel(BaseModel):
     def __init__(self, problem_type: str, random_state: int = 42):
         super().__init__(problem_type, random_state)
         self.model = None
+        self._cat_features = None
 
     def get_params(self, trial, model_config) -> Dict[str, Any]:
         """Get CatBoost hyperparameters for Optuna trial."""
@@ -121,6 +122,15 @@ class CatBoostModel(BaseModel):
         early_stopping_rounds = params.pop("early_stopping_rounds", 100)
         params["early_stopping_rounds"] = early_stopping_rounds
 
+        # Store categorical features for use in predict methods
+        self._cat_features = categorical_features
+
+        # CatBoost requires categorical features to be int, not float
+        # Convert to DataFrame to handle mixed types properly
+        if categorical_features:
+            X_train = self._prepare_data(X_train)
+            X_valid = self._prepare_data(X_valid)
+
         # Create pools with categorical features
         train_pool = Pool(X_train, y_train, cat_features=categorical_features)
         valid_pool = Pool(X_valid, y_valid, cat_features=categorical_features)
@@ -136,12 +146,27 @@ class CatBoostModel(BaseModel):
 
         self.best_iteration = self.model.best_iteration_
 
+    def _prepare_data(self, X: np.ndarray):
+        """Convert categorical features to int for CatBoost."""
+        import pandas as pd
+
+        if not self._cat_features:
+            return X
+        X_df = pd.DataFrame(X)
+        for idx in self._cat_features:
+            X_df[idx] = X_df[idx].astype(np.int32)
+        return X_df
+
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Make predictions."""
+        if self._cat_features:
+            X = self._prepare_data(X)
         return self.model.predict(X)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """Predict class probabilities."""
+        if self._cat_features:
+            X = self._prepare_data(X)
         return self.model.predict_proba(X)
 
     def get_model(self) -> Any:

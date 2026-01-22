@@ -93,9 +93,7 @@ class TestVespaTuneProblemTypeDetection:
 
         assert vtune.model_config.problem_type == ProblemType.binary_classification
 
-    def test_auto_detect_multiclass_classification(
-        self, multiclass_classification_data
-    ):
+    def test_auto_detect_multiclass_classification(self, multiclass_classification_data):
         """Test auto-detection of multiclass classification."""
         data = multiclass_classification_data
         output_dir = os.path.join(data["temp_dir"], "output")

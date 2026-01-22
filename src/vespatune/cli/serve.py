@@ -7,26 +7,20 @@ from . import BaseCommand
 
 
 def serve_vespatune_command_factory(args):
-    return ServeVespaTuneCommand(
-        args.model_path, args.port, args.host, args.workers, args.reload
-    )
+    return ServeVespaTuneCommand(args.model_path, args.port, args.host, args.workers, args.reload)
 
 
 class ServeVespaTuneCommand(BaseCommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        _parser = parser.add_parser(
-            "serve", help="Serve VespaTune API using ONNX model"
-        )
+        _parser = parser.add_parser("serve", help="Serve VespaTune API using ONNX model")
         _parser.add_argument(
             "--model_path",
             help="Path to ONNX export directory (created by 'vespatune export')",
             required=False,
             type=str,
         )
-        _parser.add_argument(
-            "--port", help="Port to serve on", default=9999, type=int, required=False
-        )
+        _parser.add_argument("--port", help="Port to serve on", default=9999, type=int, required=False)
         _parser.add_argument(
             "--host",
             help="Host to serve on",
@@ -34,9 +28,7 @@ class ServeVespaTuneCommand(BaseCommand):
             type=str,
             required=False,
         )
-        _parser.add_argument(
-            "--workers", help="Number of workers", default=1, type=int, required=False
-        )
+        _parser.add_argument("--workers", help="Number of workers", default=1, type=int, required=False)
         _parser.add_argument(
             "--reload",
             help="Enable auto-reload for development",

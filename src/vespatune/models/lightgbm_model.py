@@ -129,9 +129,7 @@ class LightGBMModel(BaseModel):
         # Build callbacks - early stopping only if not dart mode
         callbacks = [lgb.log_evaluation(period=0)]
         if early_stopping_rounds is not None:
-            callbacks.append(
-                lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)
-            )
+            callbacks.append(lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False))
 
         # Create model based on problem type
         if self.problem_type in ("binary_classification", "multi_class_classification"):

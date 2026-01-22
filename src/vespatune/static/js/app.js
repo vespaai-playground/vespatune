@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
         const segments = [4, 4, 4];
         return segments.map(len =>
-            Array.from({length: len}, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+            Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
         ).join('-');
     }
 
@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Global function for download button onclick
-    window.downloadArtifact = function(runId, path, name) {
+    window.downloadArtifact = function (runId, path, name) {
         const url = `/runs/${runId}/artifacts/download?path=${encodeURIComponent(path)}`;
         const a = document.createElement('a');
         a.href = url;

@@ -2,12 +2,10 @@
 
 Gradient Boosting + Optuna: no brainer
 
-- Auto train XGBoost, LightGBM, or CatBoost directly from CSV files
-- Auto tune hyperparameters using Optuna
+- **Web UI** for training, monitoring, and managing models
+- Tune models directly from CSV files
+- Real-time training progress with WebSocket updates
 - Export models to ONNX format for deployment
-- Serve trained models using FastAPI
-
-NOTE: PRs are currently not accepted. If there are issues/problems, please create an issue.
 
 ## Installation
 
@@ -18,6 +16,28 @@ pip install vespatune
 ```
 
 ## Quick Start
+
+### Web UI (Recommended)
+
+Start the web interface:
+
+```bash
+vespatune
+```
+
+This launches the VespaTune UI at `http://127.0.0.1:9999` where you can:
+- Upload train/validation CSV files
+- Configure model type, target columns, and hyperparameters
+- Start training with real-time progress monitoring
+- View trial results and metrics
+- Download trained models and artifacts
+- Manage multiple training runs
+
+You can also specify host and port:
+
+```bash
+vespatune --host 0.0.0.0 --port 8080
+```
 
 ### CLI
 
@@ -40,13 +60,7 @@ vespatune predict \
   --output_filename predictions.csv
 ```
 
-Export to ONNX:
-
-```bash
-vespatune export --model_path outputs/my_model
-```
-
-Serve the model:
+Serve a trained model for predictions:
 
 ```bash
 vespatune serve --model_path outputs/my_model --host 0.0.0.0 --port 8000
@@ -68,6 +82,18 @@ vtune = VespaTune(
 )
 vtune.train()
 ```
+
+## Web UI Features
+
+The web interface provides:
+
+- **File Upload**: Drag and drop CSV files for training and validation
+- **Auto Column Detection**: Automatically detects columns for target and ID selection
+- **Model Selection**: Choose between XGBoost, LightGBM, or CatBoost
+- **Real-time Monitoring**: Watch training progress with live trial updates via WebSocket
+- **Metrics Visualization**: View loss curves and hyperparameter importance
+- **Run Management**: Start, stop, and delete training runs
+- **Artifact Downloads**: Download trained models, configs, and ONNX exports
 
 ## Parameters
 
@@ -116,6 +142,17 @@ vtune.train()
 
 VespaTune uses an explicit train/validation split. If you have a single dataset, use the splitter utility:
 
+```bash
+vespatune splitter \
+  --data_filename data.csv \
+  --output splits/ \
+  --target target \
+  --task classification \
+  --num_folds 5
+```
+
+Or via Python:
+
 ```python
 from vespatune import VespaTuneSplitter
 
@@ -131,21 +168,6 @@ splitter.split()
 
 This creates `fold_0_train.csv`, `fold_0_valid.csv`, etc. for k-fold cross-validation.
 
-## ONNX Export
-
-Export trained models for deployment:
-
-```python
-from vespatune import VespaTuneExport
-
-exporter = VespaTuneExport(model_path="outputs/my_model")
-exporter.export_to_onnx(output_dir="onnx_model/", verify=True)
-```
-
-The export includes:
-- ONNX model file(s)
-- `metadata.json` with feature names and mappings
-- Encoders for categorical features and targets
 
 ## Prediction
 
@@ -168,6 +190,17 @@ predictions = predictor.predict_file("test.csv")
 ```
 
 ## CLI Reference
+
+### Default (UI)
+
+```bash
+vespatune [--host HOST] [--port PORT]
+
+options:
+  --host                Host to serve on (default: 127.0.0.1)
+  --port                Port to serve on (default: 9999)
+  --version, -v         Display VespaTune version
+```
 
 ### train
 
@@ -217,11 +250,41 @@ options:
 vespatune serve --help
 
 options:
-  --model_path          Path to trained model directory (required)
-  --host                Host to bind (default: 0.0.0.0)
-  --port                Port to bind (default: 8000)
-  --debug               Enable debug mode
+  --model_path          Path to ONNX export directory
+  --host                Host to bind (default: 127.0.0.1)
+  --port                Port to bind (default: 9999)
+  --workers             Number of workers (default: 1)
+  --reload              Enable auto-reload for development
 ```
+
+### splitter
+
+```bash
+vespatune splitter --help
+
+options:
+  --data_filename       Path to data file (required)
+  --output              Path to output directory (required)
+  --target              Target column name (required)
+  --task                Task type: classification, regression (required)
+  --num_folds           Number of folds (default: 5)
+```
+
+## Output Files
+
+After training, the following files are created in the output directory:
+
+| File | Description |
+|------|-------------|
+| `vtune_model.final` | Trained model |
+| `vtune.config` | Model configuration |
+| `vtune.best_params` | Best hyperparameters from Optuna |
+| `vtune.categorical_encoder` | Categorical feature encoder |
+| `vtune.target_encoder` | Target encoder (for classification) |
+| `params.db` | Optuna study database |
+| `train.feather` | Processed training data |
+| `valid.feather` | Processed validation data |
+| `onnx/` | ONNX export directory (after export) |
 
 ## Example
 
@@ -242,14 +305,4 @@ vtune = VespaTune(
     seed=42,
 )
 vtune.train()
-
-# The following files are created in outputs/lgb_model/:
-# - vtune.config          : Model configuration
-# - vtune_model.final     : Trained model
-# - vtune.best_params     : Best hyperparameters
-# - vtune.categorical_encoder : Categorical feature encoder
-# - vtune.target_encoder  : Target encoder (for classification)
-# - params.db             : Optuna study database
-# - train.feather         : Processed training data
-# - valid.feather         : Processed validation data
 ```
