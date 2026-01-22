@@ -13,7 +13,7 @@ from .export import export_model
 from .logger import logger
 from .models import list_models
 from .schemas import ModelConfig
-from .utils import reduce_memory_usage, train_final_model, train_model
+from .utils import is_cuda_available, reduce_memory_usage, train_final_model, train_model
 
 
 @dataclass
@@ -30,7 +30,7 @@ class VespaTune:
     targets: Optional[List[str]] = None
     features: Optional[List[str]] = None
     categorical_features: Optional[List[str]] = None
-    use_gpu: Optional[bool] = False
+    use_gpu: Optional[bool] = None  # Auto-detect if None
     seed: Optional[int] = 42
     num_trials: Optional[int] = 1000
     time_limit: Optional[int] = None
@@ -56,6 +56,12 @@ class VespaTune:
             )
         self.model_type = self.model_type.lower()
         logger.info(f"Model type: {self.model_type}")
+
+        # Auto-detect GPU if not explicitly set
+        if self.use_gpu is None:
+            self.use_gpu = is_cuda_available()
+        if self.use_gpu:
+            logger.info("GPU training enabled")
 
     def _determine_problem_type(self, train_df):
         if self.task is not None:

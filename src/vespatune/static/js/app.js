@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateMetricDropdown() {
         const current = metricSelect.value;
-        metricSelect.innerHTML = '<option value="value">Objective</option>';
+        metricSelect.innerHTML = '<option value="value">objective</option>';
 
         availableMetrics.forEach(m => {
             if (m === 'value') return;
@@ -608,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = `Trial #${trial.number}`;
         modalParams.textContent = JSON.stringify(trial.params, null, 2);
 
-        let metricsText = `Objective: ${trial.value}\n`;
+        let metricsText = `objective: ${trial.value}\n`;
         if (trial.metrics) {
             Object.entries(trial.metrics).forEach(([k, v]) => {
                 metricsText += `${k}: ${v}\n`;

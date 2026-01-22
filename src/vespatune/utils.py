@@ -1,5 +1,7 @@
 import copy
 import os
+import shutil
+import subprocess
 from functools import partial
 
 import joblib
@@ -14,6 +16,29 @@ from .models import get_model
 
 
 optuna.logging.set_verbosity(optuna.logging.INFO)
+
+
+def is_cuda_available() -> bool:
+    """Check if CUDA is available for GPU training."""
+    # Method 1: Check if nvidia-smi is available and works
+    if shutil.which("nvidia-smi"):
+        try:
+            result = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                return True
+        except (subprocess.TimeoutExpired, Exception):
+            pass
+
+    # Method 2: Try torch if available
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return True
+    except ImportError:
+        pass
+
+    return False
 
 
 def reduce_memory_usage(df, verbose=True):
