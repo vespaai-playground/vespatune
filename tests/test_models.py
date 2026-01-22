@@ -67,6 +67,9 @@ class TestModelRegistry:
             def load(self, path):
                 pass
 
+            def to_onnx(self, n_features):
+                raise NotImplementedError("ONNX export not supported for DummyModel")
+
         register_model("dummy", DummyModel)
         assert "dummy" in MODEL_REGISTRY
 

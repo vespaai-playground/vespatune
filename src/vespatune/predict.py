@@ -11,7 +11,7 @@ from pydantic import create_model
 
 from .enums import ProblemType
 from .logger import logger
-from .utils import fetch_xgb_model_params, reduce_memory_usage
+from .utils import reduce_memory_usage, use_predict_proba
 
 
 xgb.set_config(verbosity=0)
@@ -26,7 +26,7 @@ class VespaTunePredict:
         self.target_encoder = joblib.load(os.path.join(self.model_path, "vtune.target_encoder"))
         self.categorical_encoder = joblib.load(os.path.join(self.model_path, "vtune.categorical_encoder"))
         self.model = joblib.load(os.path.join(self.model_path, "vtune_model.final"))
-        _, self.use_predict_proba, _, _ = fetch_xgb_model_params(self.model_config)
+        self.use_predict_proba = use_predict_proba(self.model_config.problem_type)
 
     def get_prediction_schema(self):
         cat_features = self.model_config.categorical_features

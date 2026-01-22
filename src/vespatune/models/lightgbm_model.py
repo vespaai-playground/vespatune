@@ -2,6 +2,9 @@ from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
+import onnx
+from onnxmltools import convert_lightgbm
+from onnxmltools.convert.common.data_types import FloatTensorType
 
 from .base import BaseModel
 
@@ -173,3 +176,8 @@ class LightGBMModel(BaseModel):
     def get_booster(self):
         """Get the LightGBM booster for ONNX export."""
         return self.model.booster_
+
+    def to_onnx(self, n_features: int) -> onnx.ModelProto:
+        """Convert LightGBM model to ONNX format."""
+        initial_types = [("input", FloatTensorType([None, n_features]))]
+        return convert_lightgbm(self.model, initial_types=initial_types, target_opset=15)

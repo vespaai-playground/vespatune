@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import onnx
 
 
 class BaseModel(ABC):
@@ -95,6 +96,18 @@ class BaseModel(ABC):
     @abstractmethod
     def load(self, path: str) -> None:
         """Load the model from disk."""
+        pass
+
+    @abstractmethod
+    def to_onnx(self, n_features: int) -> onnx.ModelProto:
+        """Convert the model to ONNX format.
+
+        Args:
+            n_features: Number of input features
+
+        Returns:
+            ONNX model
+        """
         pass
 
     def get_best_iteration(self) -> Optional[int]:

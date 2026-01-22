@@ -166,7 +166,7 @@ class TestVespaTuneExportInit:
         """Test that VespaTuneExport loads the model correctly."""
         exporter = VespaTuneExport(model_path=trained_binary_model_for_export["model_path"])
 
-        assert exporter.model is not None
+        assert exporter.raw_model is not None
         assert exporter.model_config is not None
 
 

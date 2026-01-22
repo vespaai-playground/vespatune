@@ -1,8 +1,12 @@
+import json
 from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
+import onnx
 import xgboost as xgb
+from onnxmltools import convert_xgboost
+from onnxmltools.convert.common.data_types import FloatTensorType
 
 from .base import BaseModel
 
@@ -151,3 +155,25 @@ class XGBoostModel(BaseModel):
     def get_booster(self):
         """Get the XGBoost booster for ONNX export."""
         return self.model.get_booster()
+
+    def to_onnx(self, n_features: int) -> onnx.ModelProto:
+        """Convert XGBoost model to ONNX format."""
+        # Check if model can be exported (gblinear not supported)
+        booster = self.model.get_booster()
+        config = json.loads(booster.save_config())
+        booster_type = config.get("learner", {}).get("gradient_booster", {}).get("name", "")
+        if booster_type == "gblinear":
+            raise ValueError("Cannot export gblinear models to ONNX. Only gbtree and dart are supported.")
+
+        initial_types = [("input", FloatTensorType([None, n_features]))]
+
+        # onnxmltools expects feature names to follow 'f%d' pattern
+        original_feature_names = booster.feature_names
+        booster.feature_names = [f"f{i}" for i in range(n_features)]
+
+        try:
+            onnx_model = convert_xgboost(self.model, initial_types=initial_types, target_opset=15)
+        finally:
+            booster.feature_names = original_feature_names
+
+        return onnx_model

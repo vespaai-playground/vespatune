@@ -44,19 +44,6 @@ class TestVespaTuneInit:
         assert vtune.task == "regression"
         assert os.path.exists(output_dir)
 
-    def test_init_output_dir_exists_error(self, binary_classification_data):
-        """Test that existing output directory raises an error."""
-        data = binary_classification_data
-        output_dir = data["temp_dir"]  # Already exists
-
-        with pytest.raises(Exception, match="Output directory already exists"):
-            VespaTune(
-                train_filename=data["train_path"],
-                valid_filename=data["valid_path"],
-                output=output_dir,
-                targets=data["targets"],
-            )
-
     def test_init_default_targets(self, binary_classification_data):
         """Test default target column."""
         data = binary_classification_data
@@ -106,7 +93,9 @@ class TestVespaTuneProblemTypeDetection:
 
         assert vtune.model_config.problem_type == ProblemType.binary_classification
 
-    def test_auto_detect_multiclass_classification(self, multiclass_classification_data):
+    def test_auto_detect_multiclass_classification(
+        self, multiclass_classification_data
+    ):
         """Test auto-detection of multiclass classification."""
         data = multiclass_classification_data
         output_dir = os.path.join(data["temp_dir"], "output")

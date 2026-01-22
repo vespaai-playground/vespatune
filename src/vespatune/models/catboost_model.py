@@ -1,7 +1,10 @@
+import os
+import tempfile
 from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
+import onnx
 
 from .base import BaseModel
 
@@ -166,3 +169,21 @@ class CatBoostModel(BaseModel):
         else:
             self.model = CatBoostRegressor()
         self.model.load_model(path)
+
+    def to_onnx(self, n_features: int) -> onnx.ModelProto:
+        """Convert CatBoost model to ONNX format using native export."""
+        with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            self.model.save_model(
+                tmp_path,
+                format="onnx",
+                export_parameters={"onnx_domain": "ai.catboost", "onnx_model_version": 1},
+            )
+            onnx_model = onnx.load(tmp_path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        return onnx_model

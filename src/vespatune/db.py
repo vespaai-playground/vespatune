@@ -3,7 +3,9 @@ import json
 import os
 from contextlib import contextmanager
 
-DB_PATH = "vespatune.db"
+DB_DIR = os.path.expanduser("~/.vespatune")
+os.makedirs(DB_DIR, exist_ok=True)
+DB_PATH = os.path.join(DB_DIR, "vespatune.db")
 
 @contextmanager
 def get_db():

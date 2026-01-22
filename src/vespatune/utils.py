@@ -318,39 +318,3 @@ def _generate_test_predictions(model_config, final_model):
         os.path.join(model_config.output, "test_predictions.csv"), index=False
     )
     logger.info("Test predictions saved to test_predictions.csv")
-
-
-# Legacy function for backward compatibility
-def fetch_xgb_model_params(model_config):
-    """Get XGBoost model parameters. Kept for backward compatibility."""
-    import xgboost as xgb
-
-    if model_config.problem_type == ProblemType.binary_classification:
-        xgb_model = xgb.XGBClassifier
-        use_proba = True
-        direction = "minimize"
-        eval_metric = "logloss"
-    elif model_config.problem_type == ProblemType.multi_class_classification:
-        xgb_model = xgb.XGBClassifier
-        use_proba = True
-        direction = "minimize"
-        eval_metric = "mlogloss"
-    elif model_config.problem_type == ProblemType.multi_label_classification:
-        xgb_model = xgb.XGBClassifier
-        use_proba = True
-        direction = "minimize"
-        eval_metric = "logloss"
-    elif model_config.problem_type == ProblemType.single_column_regression:
-        xgb_model = xgb.XGBRegressor
-        use_proba = False
-        direction = "minimize"
-        eval_metric = "rmse"
-    elif model_config.problem_type == ProblemType.multi_column_regression:
-        xgb_model = xgb.XGBRegressor
-        use_proba = False
-        direction = "minimize"
-        eval_metric = "rmse"
-    else:
-        raise NotImplementedError
-
-    return xgb_model, use_proba, eval_metric, direction

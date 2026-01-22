@@ -1,15 +1,16 @@
 import json
 import os
+import shutil
 from dataclasses import dataclass
 from typing import List, Optional
 
 import joblib
 import numpy as np
 import onnx
-from onnxmltools.convert.common.data_types import FloatTensorType
 
 from .enums import ProblemType
 from .logger import logger
+from .models import get_model
 
 
 @dataclass
@@ -18,100 +19,19 @@ class VespaTuneExport:
 
     def __post_init__(self):
         self.model_config = joblib.load(os.path.join(self.model_path, "vtune.config"))
-        self.model = joblib.load(os.path.join(self.model_path, "vtune_model.final"))
+        self.raw_model = joblib.load(os.path.join(self.model_path, "vtune_model.final"))
         self.model_type = getattr(self.model_config, "model_type", "xgboost")
+        self.n_features = len(self.model_config.features)
 
-    def _get_initial_types(self) -> List:
-        n_features = len(self.model_config.features)
-        return [("input", FloatTensorType([None, n_features]))]
-
-    def _check_xgboost_exportable(self, model):
-        """Check if the XGBoost model can be exported to ONNX."""
-        try:
-            booster = model.get_booster()
-            config = booster.save_config()
-
-            config_dict = json.loads(config)
-            booster_type = config_dict.get("learner", {}).get("gradient_booster", {}).get("name", "")
-
-            if booster_type == "gblinear":
-                raise ValueError(
-                    "Cannot export gblinear models to ONNX. "
-                    "Only gbtree and dart boosters are supported by onnxmltools."
-                )
-        except (KeyError, TypeError):
-            pass  # Unable to determine booster type, try to export anyway
-
-    def _convert_xgboost_model(self, model):
-        """Convert XGBoost model to ONNX."""
-        from onnxmltools import convert_xgboost
-
-        self._check_xgboost_exportable(model)
-        initial_types = self._get_initial_types()
-
-        # onnxmltools expects feature names to follow 'f%d' pattern
-        booster = model.get_booster()
-        original_feature_names = booster.feature_names
-        booster.feature_names = [f"f{i}" for i in range(len(self.model_config.features))]
-
-        try:
-            onnx_model = convert_xgboost(
-                model,
-                initial_types=initial_types,
-                target_opset=15,
-            )
-        finally:
-            booster.feature_names = original_feature_names
-
-        return onnx_model
-
-    def _convert_lightgbm_model(self, model):
-        """Convert LightGBM model to ONNX."""
-        from onnxmltools import convert_lightgbm
-
-        initial_types = self._get_initial_types()
-
-        onnx_model = convert_lightgbm(
-            model,
-            initial_types=initial_types,
-            target_opset=15,
+    def _wrap_model(self, raw_model):
+        """Wrap a raw model in the appropriate model class for ONNX export."""
+        model = get_model(
+            model_name=self.model_type,
+            problem_type=self.model_config.problem_type.name,
+            random_state=42,
         )
-        return onnx_model
-
-    def _convert_catboost_model(self, model):
-        """Convert CatBoost model to ONNX using native export."""
-        import tempfile
-
-        # CatBoost has native ONNX export
-        with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
-            tmp_path = tmp.name
-
-        try:
-            model.save_model(
-                tmp_path,
-                format="onnx",
-                export_parameters={
-                    "onnx_domain": "ai.catboost",
-                    "onnx_model_version": 1,
-                },
-            )
-            onnx_model = onnx.load(tmp_path)
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-
-        return onnx_model
-
-    def _convert_single_model(self, model, target_name: Optional[str] = None):
-        """Convert a single model to ONNX based on model type."""
-        if self.model_type == "xgboost":
-            return self._convert_xgboost_model(model)
-        elif self.model_type == "lightgbm":
-            return self._convert_lightgbm_model(model)
-        elif self.model_type == "catboost":
-            return self._convert_catboost_model(model)
-        else:
-            raise ValueError(f"ONNX export not supported for model type: {self.model_type}")
+        model.model = raw_model
+        return model
 
     def export_to_onnx(
         self,
@@ -123,22 +43,24 @@ class VespaTuneExport:
             output_dir = os.path.join(self.model_path, "onnx")
 
         os.makedirs(output_dir, exist_ok=True)
-
         exported_files = []
 
         if self.model_config.problem_type in (
             ProblemType.multi_column_regression,
             ProblemType.multi_label_classification,
         ):
+            # Multiple models, one per target
             for idx, target in enumerate(self.model_config.targets):
-                target_model = self.model[idx]
-                onnx_model = self._convert_single_model(target_model, target_name=target)
+                model = self._wrap_model(self.raw_model[idx])
+                onnx_model = model.to_onnx(self.n_features)
                 output_path = os.path.join(output_dir, f"model_{target}.onnx")
                 onnx.save_model(onnx_model, output_path)
                 exported_files.append(output_path)
                 logger.info(f"Exported model for target '{target}' to {output_path}")
         else:
-            onnx_model = self._convert_single_model(self.model)
+            # Single model
+            model = self._wrap_model(self.raw_model)
+            onnx_model = model.to_onnx(self.n_features)
             output_path = os.path.join(output_dir, "model.onnx")
             onnx.save_model(onnx_model, output_path)
             exported_files.append(output_path)
@@ -154,7 +76,7 @@ class VespaTuneExport:
         return exported_files
 
     def _export_metadata(self, output_dir: str):
-        # Create mapping from ONNX feature names (f0, f1, ...) to original names
+        """Export metadata for inference."""
         feature_mapping = {f"f{i}": name for i, name in enumerate(self.model_config.features)}
 
         metadata = {
@@ -173,29 +95,25 @@ class VespaTuneExport:
 
     def _export_encoders(self, output_dir: str):
         """Export encoders needed for inference."""
-        import shutil
-
-        # Copy categorical encoder
         cat_encoder_src = os.path.join(self.model_path, "vtune.categorical_encoder")
         if os.path.exists(cat_encoder_src):
             shutil.copy(cat_encoder_src, os.path.join(output_dir, "categorical_encoder.joblib"))
             logger.info("Exported categorical encoder")
 
-        # Copy target encoder
         target_encoder_src = os.path.join(self.model_path, "vtune.target_encoder")
         if os.path.exists(target_encoder_src):
             shutil.copy(target_encoder_src, os.path.join(output_dir, "target_encoder.joblib"))
             logger.info("Exported target encoder")
 
     def _verify_exports(self, exported_files: List[str]):
+        """Verify exported ONNX models."""
         try:
             import onnxruntime as ort
         except ImportError:
-            logger.warning("onnxruntime not installed. Skipping verification. Install with: pip install onnxruntime")
+            logger.warning("onnxruntime not installed. Skipping verification.")
             return
 
-        n_features = len(self.model_config.features)
-        dummy_input = np.random.randn(1, n_features).astype(np.float32)
+        dummy_input = np.random.randn(1, self.n_features).astype(np.float32)
 
         for filepath in exported_files:
             try:

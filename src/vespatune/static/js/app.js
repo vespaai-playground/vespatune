@@ -54,6 +54,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalParams = document.getElementById('modal-params');
     const closeTrialModalBtn = document.getElementById('close-trial-modal');
 
+    // --- Utility Functions ---
+    function generateProjectName() {
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        const segments = [4, 4, 4];
+        return segments.map(len =>
+            Array.from({length: len}, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+        ).join('-');
+    }
+
     // --- Modal Functions ---
     function openNewProjectModal() {
         resetForm();
@@ -77,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
         useIdColumnCheckbox.checked = false;
         idSelect.disabled = true;
         columns = [];
+        document.getElementById('project_name').value = generateProjectName();
     }
 
     newTrainingBtn.addEventListener('click', openNewProjectModal);
@@ -192,11 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: 'Metric Value',
                     data: [],
-                    borderColor: '#6366f1',
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderColor: '#2a5446',
+                    backgroundColor: 'rgba(42, 84, 70, 0.1)',
                     borderWidth: 2,
                     pointRadius: 3,
                     pointHoverRadius: 5,
+                    pointBackgroundColor: '#2a5446',
                     tension: 0.3,
                     fill: true
                 }]
@@ -209,21 +220,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     tooltip: {
                         mode: 'index',
                         intersect: false,
-                        backgroundColor: '#12121a',
-                        titleColor: '#e8e8ec',
-                        bodyColor: '#8888a0',
-                        borderColor: '#2a2a3a',
+                        backgroundColor: '#1a1a1a',
+                        titleColor: '#ededed',
+                        bodyColor: '#999',
+                        borderColor: '#333',
                         borderWidth: 1
                     }
                 },
                 scales: {
                     x: {
-                        grid: { color: '#2a2a3a' },
-                        ticks: { color: '#5a5a70', font: { size: 10 } }
+                        grid: { color: '#1a1a1a' },
+                        ticks: { color: '#666', font: { size: 11 } }
                     },
                     y: {
-                        grid: { color: '#2a2a3a' },
-                        ticks: { color: '#5a5a70', font: { size: 10 } }
+                        grid: { color: '#1a1a1a' },
+                        ticks: { color: '#666', font: { size: 11 } }
                     }
                 },
                 interaction: {
