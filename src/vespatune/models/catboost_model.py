@@ -96,13 +96,17 @@ class CatBoostModel(BaseModel):
             loss_function = trial.suggest_categorical(
                 "loss_function", ["RMSE", "MAE", "Quantile", "Huber", "LogLinQuantile"]
             )
-            params["loss_function"] = loss_function
             params["eval_metric"] = "RMSE"
 
+            # CatBoost requires parameters to be embedded in the loss function string
             if loss_function == "Quantile":
-                params["quantile"] = trial.suggest_float("quantile", 0.1, 0.9)
+                quantile = trial.suggest_float("quantile", 0.1, 0.9)
+                params["loss_function"] = f"Quantile:alpha={quantile}"
             elif loss_function == "Huber":
-                params["huber_delta"] = trial.suggest_float("huber_delta", 0.5, 2.0)
+                delta = trial.suggest_float("huber_delta", 0.5, 2.0)
+                params["loss_function"] = f"Huber:delta={delta}"
+            else:
+                params["loss_function"] = loss_function
 
         return params
 
