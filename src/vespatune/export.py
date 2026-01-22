@@ -94,16 +94,10 @@ class VespaTuneExport:
         logger.info(f"Exported metadata to {metadata_path}")
 
     def _export_encoders(self, output_dir: str):
-        """Export encoders needed for inference."""
-        cat_encoder_src = os.path.join(self.model_path, "vtune.categorical_encoder")
-        if os.path.exists(cat_encoder_src):
-            shutil.copy(cat_encoder_src, os.path.join(output_dir, "categorical_encoder.joblib"))
-            logger.info("Exported categorical encoder")
-
-        target_encoder_src = os.path.join(self.model_path, "vtune.target_encoder")
-        if os.path.exists(target_encoder_src):
-            shutil.copy(target_encoder_src, os.path.join(output_dir, "target_encoder.joblib"))
-            logger.info("Exported target encoder")
+        """Export preprocessor needed for inference."""
+        preprocessor_src = os.path.join(self.model_path, "vtune.preprocessor.joblib")
+        shutil.copy(preprocessor_src, os.path.join(output_dir, "preprocessor.joblib"))
+        logger.info("Exported preprocessor")
 
     def _verify_exports(self, exported_files: List[str]):
         """Verify exported ONNX models."""

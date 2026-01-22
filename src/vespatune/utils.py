@@ -12,7 +12,7 @@ import pandas as pd
 from .enums import ProblemType
 from .logger import logger
 from .metrics import Metrics
-from .models import get_model
+from .models import PREPROCESSOR_REGISTRY, get_model
 
 
 optuna.logging.set_verbosity(optuna.logging.INFO)
@@ -125,13 +125,49 @@ def optimize(trial, model_config):
     train_df = pd.read_feather(os.path.join(model_config.output, "train.feather"))
     valid_df = pd.read_feather(os.path.join(model_config.output, "valid.feather"))
 
-    xtrain = train_df[model_config.features].values
-    xvalid = valid_df[model_config.features].values
-    ytrain = train_df[model_config.targets].values
-    yvalid = valid_df[model_config.targets].values
+    # Check if preprocessing is part of HP search
+    searches_preprocessing = getattr(model_config, "searches_preprocessing", False)
 
-    # Get categorical feature indices
-    cat_indices = get_categorical_indices(model_config)
+    if searches_preprocessing and "preprocessing" in params:
+        # Apply preprocessing with trial-specific params
+        preprocessing_params = params["preprocessing"]
+        model_params = params["model"]
+
+        preprocessor_class = PREPROCESSOR_REGISTRY[model_name]
+        preprocessor = preprocessor_class(
+            features=model_config.features,
+            categorical_features=model_config.categorical_features,
+            **preprocessing_params,
+        )
+
+        # Fit preprocessor on training data only
+        preprocessor.fit(
+            train_df,
+            problem_type=model_config.problem_type,
+            targets=model_config.targets,
+            idx=model_config.idx,
+        )
+
+        # Transform both train and validation
+        xtrain = preprocessor.transform(train_df)
+        xvalid = preprocessor.transform(valid_df)
+        ytrain = train_df[model_config.targets].values
+        yvalid = valid_df[model_config.targets].values
+
+        # Get categorical indices from preprocessor
+        cat_indices = preprocessor.get_categorical_indices()
+
+        # Use model params for training
+        params = model_params
+    else:
+        # Standard flow - data is already preprocessed
+        xtrain = train_df[model_config.features].values
+        xvalid = valid_df[model_config.features].values
+        ytrain = train_df[model_config.targets].values
+        yvalid = valid_df[model_config.targets].values
+
+        # Get categorical feature indices
+        cat_indices = get_categorical_indices(model_config)
 
     # Train model
     if model_config.problem_type in (
@@ -214,30 +250,81 @@ def train_final_model(model_config, best_params):
     problem_type_str = model_config.problem_type.name
 
     best_params = copy.deepcopy(best_params)
-    best_params.pop("early_stopping_rounds", None)  # Remove, not used in final training
 
-    # Handle GPU settings for XGBoost
-    if model_config.use_gpu and model_name == "xgboost":
-        best_params["device"] = "cuda"
-        best_params["tree_method"] = "hist"
+    # Check if preprocessing is part of HP search
+    searches_preprocessing = getattr(model_config, "searches_preprocessing", False)
 
     # Load and combine train + valid data
     train_df = pd.read_feather(os.path.join(model_config.output, "train.feather"))
     valid_df = pd.read_feather(os.path.join(model_config.output, "valid.feather"))
     full_train_df = pd.concat([train_df, valid_df], ignore_index=True)
 
-    xtrain = full_train_df[model_config.features].values
-    ytrain = full_train_df[model_config.targets].values
+    if searches_preprocessing:
+        # Extract preprocessing and model params from best_params
+        # best_params from Optuna are flattened, so we need to reconstruct
+        # Note: encoding is a class attribute, not a hyperparameter
+        preprocessing_param_names = {"numeric_impute_strategy", "categorical_impute_strategy", "scaler"}
+        preprocessing_params = {}
+        model_params = {}
 
-    # Get categorical feature indices
-    cat_indices = get_categorical_indices(model_config)
+        for key, value in best_params.items():
+            if key in preprocessing_param_names:
+                preprocessing_params[key] = value
+            else:
+                model_params[key] = value
 
-    # For final model, set n_estimators/iterations
-    if "n_estimators" not in best_params and "iterations" not in best_params:
-        if model_name == "catboost":
-            best_params["iterations"] = 10000
-        else:
-            best_params["n_estimators"] = 10000
+        # Remove early stopping from model params
+        model_params.pop("early_stopping_rounds", None)
+
+        # Handle GPU settings for XGBoost
+        if model_config.use_gpu and model_name == "xgboost":
+            model_params["device"] = "cuda"
+            model_params["tree_method"] = "hist"
+
+        # Create and fit preprocessor with best params
+        preprocessor_class = PREPROCESSOR_REGISTRY[model_name]
+        preprocessor = preprocessor_class(
+            features=model_config.features,
+            categorical_features=model_config.categorical_features,
+            **preprocessing_params,
+        )
+        preprocessor.fit(
+            full_train_df,
+            problem_type=model_config.problem_type,
+            targets=model_config.targets,
+            idx=model_config.idx,
+        )
+
+        # Save the final preprocessor
+        logger.info("Saving final preprocessor")
+        preprocessor.save(f"{model_config.output}/vtune.preprocessor")
+
+        xtrain = preprocessor.transform(full_train_df)
+        ytrain = full_train_df[model_config.targets].values
+
+        cat_indices = preprocessor.get_categorical_indices()
+        best_params = model_params
+    else:
+        best_params.pop("early_stopping_rounds", None)  # Remove, not used in final training
+
+        # Handle GPU settings for XGBoost
+        if model_config.use_gpu and model_name == "xgboost":
+            best_params["device"] = "cuda"
+            best_params["tree_method"] = "hist"
+
+        xtrain = full_train_df[model_config.features].values
+        ytrain = full_train_df[model_config.targets].values
+
+        # Get categorical feature indices
+        cat_indices = get_categorical_indices(model_config)
+
+    # For final model, set n_estimators/iterations (tree-based models only)
+    if model_name not in ("logreg",):
+        if "n_estimators" not in best_params and "iterations" not in best_params:
+            if model_name == "catboost":
+                best_params["iterations"] = 10000
+            else:
+                best_params["n_estimators"] = 10000
 
     # Train final model
     if model_config.problem_type in (
@@ -299,10 +386,21 @@ def train_final_model(model_config, best_params):
 
 def _generate_test_predictions(model_config, final_model):
     """Generate predictions on test set."""
+    from .preprocessor import BasePreprocessor
+
     logger.info("Generating test predictions")
     test_df = pd.read_feather(os.path.join(model_config.output, "test.feather"))
-    xtest = test_df[model_config.features].values
     test_ids = test_df[model_config.idx].values
+
+    # Check if preprocessing was part of HP search
+    searches_preprocessing = getattr(model_config, "searches_preprocessing", False)
+
+    if searches_preprocessing:
+        # Load preprocessor and transform test data
+        preprocessor = BasePreprocessor.load(f"{model_config.output}/vtune.preprocessor")
+        xtest = preprocessor.transform(test_df)
+    else:
+        xtest = test_df[model_config.features].values
 
     if model_config.problem_type in (
         ProblemType.multi_column_regression,

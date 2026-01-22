@@ -6,7 +6,17 @@ import joblib
 import numpy as np
 import onnx
 
+from ..preprocessor import BasePreprocessor
 from .base import BaseModel
+
+
+class CatBoostPreprocessor(BasePreprocessor):
+    """Preprocessor for CatBoost models.
+
+    Uses -1 for unknown categorical values (CatBoost's missing value indicator).
+    """
+
+    unknown_value = -1
 
 
 class CatBoostModel(BaseModel):
@@ -15,6 +25,13 @@ class CatBoostModel(BaseModel):
     name = "catboost"
     supports_categorical = True  # Best native categorical support
     supports_gpu = True
+    supported_problem_types = [
+        "binary_classification",
+        "multi_class_classification",
+        "multi_label_classification",
+        "single_column_regression",
+        "multi_column_regression",
+    ]
 
     def __init__(self, problem_type: str, random_state: int = 42):
         super().__init__(problem_type, random_state)
@@ -125,6 +142,17 @@ class CatBoostModel(BaseModel):
         # Extract early stopping rounds
         early_stopping_rounds = params.pop("early_stopping_rounds", 100)
         params["early_stopping_rounds"] = early_stopping_rounds
+
+        # Handle Quantile and Huber loss function parameters
+        # CatBoost requires these to be embedded in the loss_function string
+        if "quantile" in params:
+            quantile = params.pop("quantile")
+            if params.get("loss_function") == "Quantile":
+                params["loss_function"] = f"Quantile:alpha={quantile}"
+        if "huber_delta" in params:
+            delta = params.pop("huber_delta")
+            if params.get("loss_function") == "Huber":
+                params["loss_function"] = f"Huber:delta={delta}"
 
         # Store categorical features for use in predict methods
         self._cat_features = categorical_features

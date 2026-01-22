@@ -8,10 +8,20 @@ import xgboost as xgb
 from onnxmltools import convert_xgboost
 from onnxmltools.convert.common.data_types import FloatTensorType
 
+from ..preprocessor import BasePreprocessor
 from .base import BaseModel
 
 
 xgb.set_config(verbosity=0)
+
+
+class XGBoostPreprocessor(BasePreprocessor):
+    """Preprocessor for XGBoost models.
+
+    Uses NaN for unknown categorical values.
+    """
+
+    unknown_value = np.nan
 
 
 class XGBoostModel(BaseModel):
@@ -20,6 +30,13 @@ class XGBoostModel(BaseModel):
     name = "xgboost"
     supports_categorical = False  # Requires encoding
     supports_gpu = True
+    supported_problem_types = [
+        "binary_classification",
+        "multi_class_classification",
+        "multi_label_classification",
+        "single_column_regression",
+        "multi_column_regression",
+    ]
 
     def __init__(self, problem_type: str, random_state: int = 42):
         super().__init__(problem_type, random_state)

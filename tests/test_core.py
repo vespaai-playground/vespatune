@@ -224,8 +224,7 @@ class TestVespaTuneDataProcessing:
 
         vtune._process_data()
 
-        assert os.path.exists(os.path.join(output_dir, "vtune.categorical_encoder"))
-        assert os.path.exists(os.path.join(output_dir, "vtune.target_encoder"))
+        assert os.path.exists(os.path.join(output_dir, "vtune.preprocessor.joblib"))
 
     def test_categorical_encoding(self, binary_classification_data):
         """Test categorical feature encoding."""
@@ -243,9 +242,12 @@ class TestVespaTuneDataProcessing:
 
         vtune._process_data()
 
-        # Check that categorical encoder was created
-        encoder = joblib.load(os.path.join(output_dir, "vtune.categorical_encoder"))
-        assert encoder is not None
+        # Check that preprocessor was created with categorical features
+        from vespatune import BasePreprocessor
+
+        preprocessor = BasePreprocessor.load(os.path.join(output_dir, "vtune.preprocessor.joblib"))
+        assert preprocessor is not None
+        assert len(preprocessor.categorical_features_) > 0
 
         # Check that categorical features are in config
         assert "cat_feature" in vtune.model_config.categorical_features

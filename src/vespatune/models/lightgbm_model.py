@@ -6,7 +6,17 @@ import onnx
 from onnxmltools import convert_lightgbm
 from onnxmltools.convert.common.data_types import FloatTensorType
 
+from ..preprocessor import BasePreprocessor
 from .base import BaseModel
+
+
+class LightGBMPreprocessor(BasePreprocessor):
+    """Preprocessor for LightGBM models.
+
+    Uses NaN for unknown categorical values.
+    """
+
+    unknown_value = np.nan
 
 
 class LightGBMModel(BaseModel):
@@ -15,6 +25,13 @@ class LightGBMModel(BaseModel):
     name = "lightgbm"
     supports_categorical = True  # Native categorical support
     supports_gpu = True
+    supported_problem_types = [
+        "binary_classification",
+        "multi_class_classification",
+        "multi_label_classification",
+        "single_column_regression",
+        "multi_column_regression",
+    ]
 
     def __init__(self, problem_type: str, random_state: int = 42):
         super().__init__(problem_type, random_state)

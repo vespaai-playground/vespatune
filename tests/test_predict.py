@@ -97,7 +97,7 @@ class TestVespaTunePredictInit:
 
         assert predictor.model is not None
         assert predictor.model_config is not None
-        assert predictor.categorical_encoder is not None
+        assert predictor.preprocessor is not None
 
     @pytest.mark.slow
     def test_init_loads_config(self, trained_binary_model):
@@ -247,11 +247,21 @@ def onnx_binary_model(binary_classification_data):
         time_limit=60,
     )
 
-    # Save model and config
+    # Create and save preprocessor
+    from vespatune import XGBoostPreprocessor
+
+    preprocessor = XGBoostPreprocessor(features=features, categorical_features=[])
+    preprocessor.fit(
+        train_df,
+        problem_type=ProblemType.binary_classification,
+        targets=["target"],
+        idx="id",
+    )
+
+    # Save model, config, and preprocessor
     joblib.dump(model, os.path.join(output_dir, "vtune_model.final"))
     joblib.dump(model_config, os.path.join(output_dir, "vtune.config"))
-    joblib.dump(None, os.path.join(output_dir, "vtune.categorical_encoder"))
-    joblib.dump(None, os.path.join(output_dir, "vtune.target_encoder"))
+    preprocessor.save(os.path.join(output_dir, "vtune.preprocessor"))
 
     # Export to ONNX
     exporter = VespaTuneExport(model_path=output_dir)
@@ -302,10 +312,20 @@ def onnx_regression_model(regression_data):
         time_limit=60,
     )
 
+    # Create and save preprocessor
+    from vespatune import XGBoostPreprocessor
+
+    preprocessor = XGBoostPreprocessor(features=features, categorical_features=[])
+    preprocessor.fit(
+        train_df,
+        problem_type=ProblemType.single_column_regression,
+        targets=["target"],
+        idx="id",
+    )
+
     joblib.dump(model, os.path.join(output_dir, "vtune_model.final"))
     joblib.dump(model_config, os.path.join(output_dir, "vtune.config"))
-    joblib.dump(None, os.path.join(output_dir, "vtune.categorical_encoder"))
-    joblib.dump(None, os.path.join(output_dir, "vtune.target_encoder"))
+    preprocessor.save(os.path.join(output_dir, "vtune.preprocessor"))
 
     exporter = VespaTuneExport(model_path=output_dir)
     exporter.export_to_onnx(output_dir=onnx_dir)

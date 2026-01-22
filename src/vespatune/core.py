@@ -5,13 +5,12 @@ from typing import List, Optional
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
 from sklearn.utils.multiclass import type_of_target
 
 from .enums import ProblemType
 from .export import export_model
 from .logger import logger
-from .models import list_models
+from .models import MODEL_REGISTRY, get_preprocessor, list_models
 from .schemas import ModelConfig
 from .utils import is_cuda_available, reduce_memory_usage, train_final_model, train_model
 
@@ -130,45 +129,85 @@ class VespaTune:
             self.features = list(train_df.columns)
             self.features = [x for x in self.features if x not in ignore_columns]
 
-        # encode target(s)
-        if problem_type in [
-            ProblemType.binary_classification,
-            ProblemType.multi_class_classification,
-        ]:
-            logger.info("Encoding target(s)")
-            target_encoder = LabelEncoder()
-            target_encoder.fit(train_df[self.targets].values.reshape(-1))
-            train_df.loc[:, self.targets] = target_encoder.transform(train_df[self.targets].values.reshape(-1))
-            valid_df.loc[:, self.targets] = target_encoder.transform(valid_df[self.targets].values.reshape(-1))
-        else:
-            target_encoder = None
+        # Check if model searches over preprocessing parameters
+        model_class = MODEL_REGISTRY[self.model_type]
+        searches_preprocessing = getattr(model_class, "searches_preprocessing", False)
 
-        if self.categorical_features is None:
-            categorical_features = []
-            for col in self.features:
-                if train_df[col].dtype == "object":
-                    categorical_features.append(col)
-        else:
-            categorical_features = self.categorical_features
+        # Create and fit model-specific preprocessor
+        logger.info(f"Fitting {self.model_type} preprocessor")
+        preprocessor = get_preprocessor(
+            self.model_type,
+            categorical_features=self.categorical_features,
+            features=self.features,
+        )
+        preprocessor.fit(
+            train_df,
+            problem_type=problem_type,
+            targets=self.targets,
+            idx=self.idx,
+        )
 
-        logger.info(f"Found {len(categorical_features)} categorical features.")
+        # Get the actual categorical features (may be auto-detected)
+        categorical_features = preprocessor.categorical_features_
 
-        # encode categorical features
-        if len(categorical_features) > 0:
-            logger.info("Encoding categorical features")
-            categorical_encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=np.nan)
-            train_df[categorical_features] = categorical_encoder.fit_transform(train_df[categorical_features].values)
-            valid_df[categorical_features] = categorical_encoder.transform(valid_df[categorical_features].values)
+        if searches_preprocessing:
+            # For models that search preprocessing, save raw data
+            # Only transform targets, preprocessing happens per trial
+            logger.info("Model searches preprocessing - saving raw data")
+
+            # Transform targets for classification
+            if preprocessor.target_encoder_ is not None:
+                train_df.loc[:, self.targets] = preprocessor.transform_target(train_df[self.targets].values.ravel())
+                valid_df.loc[:, self.targets] = preprocessor.transform_target(valid_df[self.targets].values.ravel())
+
+            # Save target encoder separately for later use
+            joblib.dump(preprocessor.target_encoder_, f"{self.output}/vtune.target_encoder")
+
+            # save raw data
+            train_df.to_feather(os.path.join(self.output, "train.feather"))
+            valid_df.to_feather(os.path.join(self.output, "valid.feather"))
             if self.test_filename is not None:
-                test_df[categorical_features] = categorical_encoder.transform(test_df[categorical_features].values)
-        else:
-            categorical_encoder = None
+                test_df.to_feather(os.path.join(self.output, "test.feather"))
 
-        # save processed data
-        train_df.to_feather(os.path.join(self.output, "train.feather"))
-        valid_df.to_feather(os.path.join(self.output, "valid.feather"))
-        if self.test_filename is not None:
-            test_df.to_feather(os.path.join(self.output, "test.feather"))
+        else:
+            # For models that don't search preprocessing, transform once
+            # Transform features (in-place update of DataFrames)
+            train_transformed = preprocessor.transform(train_df)
+            valid_transformed = preprocessor.transform(valid_df)
+
+            # Get feature names in transformed order
+            feature_names_out = preprocessor.get_feature_names_out()
+
+            # Update DataFrames with transformed features
+            for i, col in enumerate(feature_names_out):
+                train_df[col] = train_transformed[:, i]
+                valid_df[col] = valid_transformed[:, i]
+
+            if self.test_filename is not None:
+                test_transformed = preprocessor.transform(test_df)
+                for i, col in enumerate(feature_names_out):
+                    test_df[col] = test_transformed[:, i]
+
+            # Transform targets for classification
+            if preprocessor.target_encoder_ is not None:
+                train_df.loc[:, self.targets] = preprocessor.transform_target(train_df[self.targets].values.ravel())
+                valid_df.loc[:, self.targets] = preprocessor.transform_target(valid_df[self.targets].values.ravel())
+
+            # Update features to use the transformed order
+            self.features = feature_names_out
+
+            # save processed data
+            train_df.to_feather(os.path.join(self.output, "train.feather"))
+            valid_df.to_feather(os.path.join(self.output, "valid.feather"))
+            if self.test_filename is not None:
+                test_df.to_feather(os.path.join(self.output, "test.feather"))
+
+            # Save preprocessor
+            logger.info("Saving preprocessor")
+            preprocessor.save(f"{self.output}/vtune.preprocessor")
+
+            # Save target encoder separately (for test predictions)
+            joblib.dump(preprocessor.target_encoder_, f"{self.output}/vtune.target_encoder")
 
         # save config
         model_config = {
@@ -186,17 +225,13 @@ class VespaTune:
             "num_trials": self.num_trials,
             "time_limit": self.time_limit,
             "model_type": self.model_type,
+            "searches_preprocessing": searches_preprocessing,
         }
 
         self.model_config = ModelConfig(**model_config)
         logger.info(f"Model config: {self.model_config}")
         logger.info("Saving model config")
         joblib.dump(self.model_config, f"{self.output}/vtune.config")
-
-        # save encoders
-        logger.info("Saving encoders")
-        joblib.dump(categorical_encoder, f"{self.output}/vtune.categorical_encoder")
-        joblib.dump(target_encoder, f"{self.output}/vtune.target_encoder")
 
     def train(self, callbacks=None):
         self._process_data()

@@ -11,10 +11,109 @@ from pydantic import create_model
 
 from .enums import ProblemType
 from .logger import logger
+from .preprocessor import BasePreprocessor
 from .utils import reduce_memory_usage, use_predict_proba
 
 
 xgb.set_config(verbosity=0)
+
+
+@dataclass
+class VespaTuneProcessor:
+    """Standalone preprocessor for VespaTune models.
+
+    Use this when you want to preprocess data independently and pass it
+    to an ONNX model or external inference system.
+
+    Example:
+        >>> processor = VespaTuneProcessor(model_path="./output")
+        >>> # For DataFrame input
+        >>> processed = processor.transform(df)
+        >>> # For single sample
+        >>> processed = processor.transform_single({"feature1": 1.0, "feature2": "A"})
+        >>> # Then pass to ONNX runtime
+        >>> session.run(None, {"input": processed})
+    """
+
+    model_path: str
+
+    def __post_init__(self):
+        # Try loading from ONNX export directory first (has metadata.json)
+        metadata_path = os.path.join(self.model_path, "metadata.json")
+        if os.path.exists(metadata_path):
+            # ONNX export directory
+            with open(metadata_path) as f:
+                metadata = json.load(f)
+            self.features = metadata["features"]
+            self.categorical_features = metadata["categorical_features"]
+            self.targets = metadata["targets"]
+            self.problem_type = metadata["problem_type"]
+            self.idx = metadata.get("idx", "id")
+            preprocessor_path = os.path.join(self.model_path, "preprocessor.joblib")
+        else:
+            # Regular model directory
+            config_path = os.path.join(self.model_path, "vtune.config")
+            if not os.path.exists(config_path):
+                raise FileNotFoundError(f"Neither metadata.json nor vtune.config found in {self.model_path}")
+            model_config = joblib.load(config_path)
+            self.features = model_config.features
+            self.categorical_features = model_config.categorical_features
+            self.targets = model_config.targets
+            self.problem_type = model_config.problem_type.name
+            self.idx = model_config.idx
+            preprocessor_path = os.path.join(self.model_path, "vtune.preprocessor.joblib")
+
+        self.preprocessor = BasePreprocessor.load(preprocessor_path)
+        logger.info(f"Loaded preprocessor from {preprocessor_path}")
+
+    def get_feature_names(self) -> List[str]:
+        """Get the list of input feature names."""
+        return self.features
+
+    def get_categorical_features(self) -> List[str]:
+        """Get the list of categorical feature names."""
+        return self.categorical_features
+
+    def get_feature_names_out(self) -> List[str]:
+        """Get the list of output feature names after transformation."""
+        return self.preprocessor.get_feature_names_out()
+
+    def transform(self, df: pd.DataFrame) -> np.ndarray:
+        """Transform a DataFrame to model-ready features.
+
+        Args:
+            df: Input DataFrame with raw features.
+
+        Returns:
+            Numpy array of transformed features ready for model inference.
+        """
+        return self.preprocessor.transform(df).astype(np.float32)
+
+    def transform_single(self, sample: Dict[str, Union[str, int, float]]) -> np.ndarray:
+        """Transform a single sample to model-ready features.
+
+        Args:
+            sample: Dictionary mapping feature names to values.
+
+        Returns:
+            Numpy array of shape (1, n_features) ready for model inference.
+        """
+        sample_df = pd.DataFrame.from_dict(sample, orient="index").T
+        return self.transform(sample_df)
+
+    def get_input_schema(self):
+        """Generate Pydantic schema for input validation.
+
+        Returns:
+            A Pydantic model class for validating input data.
+        """
+        schema = {}
+        for feat in self.features:
+            if feat in self.categorical_features:
+                schema[feat] = (str, ...)
+            else:
+                schema[feat] = (float, ...)
+        return create_model("InputSchema", **schema)
 
 
 @dataclass
@@ -23,10 +122,13 @@ class VespaTunePredict:
 
     def __post_init__(self):
         self.model_config = joblib.load(os.path.join(self.model_path, "vtune.config"))
-        self.target_encoder = joblib.load(os.path.join(self.model_path, "vtune.target_encoder"))
-        self.categorical_encoder = joblib.load(os.path.join(self.model_path, "vtune.categorical_encoder"))
         self.model = joblib.load(os.path.join(self.model_path, "vtune_model.final"))
         self.use_predict_proba = use_predict_proba(self.model_config.problem_type)
+
+        # Load preprocessor
+        preprocessor_path = os.path.join(self.model_path, "vtune.preprocessor.joblib")
+        self.preprocessor = BasePreprocessor.load(preprocessor_path)
+        self.target_encoder = self.preprocessor.target_encoder_
 
     def get_prediction_schema(self):
         cat_features = self.model_config.categorical_features
@@ -40,18 +142,10 @@ class VespaTunePredict:
         return create_model("PredictSchema", **schema["PredictSchema"])
 
     def _predict_df(self, df):
-        categorical_features = self.model_config.categorical_features
         test_ids = df[self.model_config.idx].values
 
-        test_df = df.copy(deep=True)
-        if len(categorical_features) > 0 and self.categorical_encoder is not None:
-            test_df[categorical_features] = self.categorical_encoder.transform(test_df[categorical_features].values)
-
-        test_features = test_df[self.model_config.features]
-
-        for col in test_features.columns:
-            if test_features[col].dtype == "object":
-                test_features[col] = test_features[col].astype(np.int64)
+        # Preprocess features
+        test_features = self.preprocessor.transform(df)
 
         if self.model_config.problem_type in (
             ProblemType.multi_column_regression,
@@ -122,18 +216,10 @@ class VespaTuneONNXPredict:
         self.categorical_features = self.metadata["categorical_features"]
         self.idx = self.metadata.get("idx", "id")
 
-        # Load encoders
-        cat_encoder_path = os.path.join(self.model_path, "categorical_encoder.joblib")
-        if os.path.exists(cat_encoder_path):
-            self.categorical_encoder = joblib.load(cat_encoder_path)
-        else:
-            self.categorical_encoder = None
-
-        target_encoder_path = os.path.join(self.model_path, "target_encoder.joblib")
-        if os.path.exists(target_encoder_path):
-            self.target_encoder = joblib.load(target_encoder_path)
-        else:
-            self.target_encoder = None
+        # Load preprocessor
+        preprocessor_path = os.path.join(self.model_path, "preprocessor.joblib")
+        self.preprocessor = BasePreprocessor.load(preprocessor_path)
+        self.target_encoder = self.preprocessor.target_encoder_
 
         # Load ONNX model(s)
         self.sessions = self._load_onnx_sessions(ort)
@@ -177,17 +263,7 @@ class VespaTuneONNXPredict:
 
     def _preprocess(self, df: pd.DataFrame) -> np.ndarray:
         """Preprocess input data for ONNX inference."""
-        test_df = df.copy(deep=True)
-
-        # Encode categorical features
-        if len(self.categorical_features) > 0 and self.categorical_encoder is not None:
-            test_df[self.categorical_features] = self.categorical_encoder.transform(
-                test_df[self.categorical_features].values
-            )
-
-        # Extract features in correct order
-        features_array = test_df[self.features].values.astype(np.float32)
-        return features_array
+        return self.preprocessor.transform(df)
 
     def _run_inference(self, features: np.ndarray) -> np.ndarray:
         """Run ONNX inference."""

@@ -17,8 +17,17 @@ class BaseModel(ABC):
     name: str = "base"
     supports_categorical: bool = False
     supports_gpu: bool = False
+    searches_preprocessing: bool = False  # If True, preprocessing params are part of HP search
+    supported_problem_types: list = None  # None means all types supported
 
     def __init__(self, problem_type: str, random_state: int = 42):
+        # Validate problem type if model has restrictions
+        if self.supported_problem_types is not None:
+            if problem_type not in self.supported_problem_types:
+                raise ValueError(
+                    f"{self.__class__.__name__} does not support problem type '{problem_type}'. "
+                    f"Supported types: {self.supported_problem_types}"
+                )
         self.problem_type = problem_type
         self.random_state = random_state
         self.model = None

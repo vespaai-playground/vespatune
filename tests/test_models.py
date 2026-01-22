@@ -7,6 +7,7 @@ from vespatune.models import MODEL_REGISTRY, get_model, list_models, register_mo
 from vespatune.models.base import BaseModel
 from vespatune.models.catboost_model import CatBoostModel
 from vespatune.models.lightgbm_model import LightGBMModel
+from vespatune.models.logreg_model import LogRegModel
 from vespatune.models.xgboost_model import XGBoostModel
 
 
@@ -16,6 +17,7 @@ class TestModelRegistry:
         assert "xgboost" in models
         assert "lightgbm" in models
         assert "catboost" in models
+        assert "logreg" in models
 
     def test_get_model_xgboost(self):
         model = get_model("xgboost", "binary_classification")
@@ -31,6 +33,11 @@ class TestModelRegistry:
         model = get_model("catboost", "binary_classification")
         assert isinstance(model, CatBoostModel)
         assert model.name == "catboost"
+
+    def test_get_model_logreg(self):
+        model = get_model("logreg", "binary_classification")
+        assert isinstance(model, LogRegModel)
+        assert model.name == "logreg"
 
     def test_get_model_case_insensitive(self):
         model = get_model("XGBOOST", "binary_classification")
@@ -98,6 +105,8 @@ class TestXGBoostModel:
         assert xgb_model.name == "xgboost"
         assert xgb_model.supports_categorical is False
         assert xgb_model.supports_gpu is True
+        assert "binary_classification" in xgb_model.supported_problem_types
+        assert "single_column_regression" in xgb_model.supported_problem_types
 
     def test_fit_predict_binary(self, xgb_model, sample_data):
         X_train, y_train, X_valid, y_valid = sample_data
@@ -161,6 +170,8 @@ class TestLightGBMModel:
         assert lgb_model.name == "lightgbm"
         assert lgb_model.supports_categorical is True
         assert lgb_model.supports_gpu is True
+        assert "binary_classification" in lgb_model.supported_problem_types
+        assert "single_column_regression" in lgb_model.supported_problem_types
 
     def test_fit_predict_binary(self, lgb_model, sample_data):
         X_train, y_train, X_valid, y_valid = sample_data
@@ -215,6 +226,8 @@ class TestCatBoostModel:
         assert cb_model.name == "catboost"
         assert cb_model.supports_categorical is True
         assert cb_model.supports_gpu is True
+        assert "binary_classification" in cb_model.supported_problem_types
+        assert "single_column_regression" in cb_model.supported_problem_types
 
     def test_fit_predict_binary(self, cb_model, sample_data):
         X_train, y_train, X_valid, y_valid = sample_data
@@ -249,6 +262,115 @@ class TestCatBoostModel:
         predictions = model.predict(X_valid)
 
         assert predictions.shape == (20,)
+
+
+class TestLogRegModel:
+    @pytest.fixture
+    def logreg_model(self):
+        return LogRegModel(problem_type="binary_classification", random_state=42)
+
+    @pytest.fixture
+    def sample_data(self):
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 2, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 2, 20)
+        return X_train, y_train, X_valid, y_valid
+
+    def test_model_attributes(self, logreg_model):
+        assert logreg_model.name == "logreg"
+        assert logreg_model.supports_categorical is False
+        assert logreg_model.supports_gpu is False
+        assert logreg_model.searches_preprocessing is True
+        assert "binary_classification" in logreg_model.supported_problem_types
+        assert "multi_class_classification" in logreg_model.supported_problem_types
+
+    def test_rejects_regression_task(self):
+        """LogReg should raise error for regression tasks."""
+        with pytest.raises(ValueError, match="does not support problem type"):
+            LogRegModel(problem_type="single_column_regression")
+
+        with pytest.raises(ValueError, match="does not support problem type"):
+            LogRegModel(problem_type="multi_column_regression")
+
+    def test_fit_predict_binary(self, logreg_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 100}
+
+        logreg_model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = logreg_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+        assert set(predictions).issubset({0, 1})
+
+    def test_predict_proba_binary(self, logreg_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 100}
+
+        logreg_model.fit(X_train, y_train, X_valid, y_valid, params)
+        proba = logreg_model.predict_proba(X_valid)
+
+        assert proba.shape == (20, 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_get_model(self, logreg_model, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 100}
+
+        logreg_model.fit(X_train, y_train, X_valid, y_valid, params)
+        model = logreg_model.get_model()
+
+        assert model is not None
+
+    def test_get_params_structure(self, logreg_model):
+        """Test that get_params returns preprocessing and model params."""
+        trial = MagicMock()
+        trial.suggest_categorical.side_effect = lambda name, choices: choices[0]
+        trial.suggest_int.return_value = 100
+        trial.suggest_float.return_value = 0.1
+
+        model_config = MagicMock()
+        model_config.use_gpu = False
+
+        params = logreg_model.get_params(trial, model_config)
+
+        # Should return nested structure
+        assert "preprocessing" in params
+        assert "model" in params
+        assert "numeric_impute_strategy" in params["preprocessing"]
+        assert "scaler" in params["preprocessing"]
+        assert "C" in params["model"]
+
+    def test_fit_with_nested_params(self, logreg_model, sample_data):
+        """Test that fit works when given nested params with 'model' key."""
+        X_train, y_train, X_valid, y_valid = sample_data
+        params = {
+            "model": {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 100},
+            "preprocessing": {"numeric_impute_strategy": "median", "scaler": "standard"},
+        }
+
+        logreg_model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = logreg_model.predict(X_valid)
+
+        assert predictions.shape == (20,)
+
+    def test_multiclass(self):
+        model = LogRegModel(problem_type="multi_class_classification", random_state=42)
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 3, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 3, 20)
+
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 200}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (20,)
+        assert proba.shape == (20, 3)
+        assert np.allclose(proba.sum(axis=1), 1.0)
 
 
 class TestToOnnx:
@@ -287,6 +409,16 @@ class TestToOnnx:
         X_train, y_train, X_valid, y_valid = sample_data
         model = CatBoostModel(problem_type="binary_classification", random_state=42)
         params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+
+        onnx_model = model.to_onnx(n_features=5)
+        assert onnx_model is not None
+        assert hasattr(onnx_model, "graph")
+
+    def test_logreg_to_onnx(self, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        model = LogRegModel(problem_type="binary_classification", random_state=42)
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 100}
         model.fit(X_train, y_train, X_valid, y_valid, params)
 
         onnx_model = model.to_onnx(n_features=5)
@@ -333,6 +465,21 @@ class TestGetParams:
 
         model.get_params(trial, model_config)
         assert trial.suggest_float.called or trial.suggest_int.called
+
+    def test_logreg_get_params(self):
+        model = LogRegModel(problem_type="binary_classification", random_state=42)
+        trial = MagicMock()
+        trial.suggest_float.return_value = 0.1
+        trial.suggest_int.return_value = 100
+        trial.suggest_categorical.side_effect = lambda name, choices: choices[0]
+
+        model_config = MagicMock()
+        model_config.use_gpu = False
+
+        params = model.get_params(trial, model_config)
+        # LogReg returns nested params
+        assert "preprocessing" in params
+        assert "model" in params
 
 
 # ============================================================================
@@ -399,6 +546,20 @@ class TestRealDataBinaryClassification:
         X_train, y_train, X_valid, y_valid, n_features = real_data
         model = CatBoostModel(problem_type="binary_classification", random_state=42)
         params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), 2)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_logreg_binary_real_data(self, real_data):
+        """Test LogReg with real binary classification data."""
+        X_train, y_train, X_valid, y_valid, n_features = real_data
+        model = LogRegModel(problem_type="binary_classification", random_state=42)
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 200}
 
         model.fit(X_train, y_train, X_valid, y_valid, params)
         predictions = model.predict(X_valid)
@@ -479,6 +640,20 @@ class TestRealDataMultiClassClassification:
 
         # CatBoost predict returns (n_samples, 1) for multiclass, flatten it
         predictions = predictions.ravel()
+        assert predictions.shape == (len(y_valid),)
+        assert proba.shape == (len(y_valid), n_classes)
+        assert np.allclose(proba.sum(axis=1), 1.0)
+
+    def test_logreg_multiclass_real_data(self, real_data):
+        """Test LogReg with real multi-class classification data."""
+        X_train, y_train, X_valid, y_valid, n_features, n_classes = real_data
+        model = LogRegModel(problem_type="multi_class_classification", random_state=42)
+        params = {"l1_ratio": 0, "C": 1.0, "solver": "lbfgs", "max_iter": 200}
+
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+        predictions = model.predict(X_valid)
+        proba = model.predict_proba(X_valid)
+
         assert predictions.shape == (len(y_valid),)
         assert proba.shape == (len(y_valid), n_classes)
         assert np.allclose(proba.sum(axis=1), 1.0)
