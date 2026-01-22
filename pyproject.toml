@@ -1,6 +1,6 @@
 [project]
 name = "vespatune"
-version = "0.0.1"
+version = "0.0.2"
 description = "vespatune: no-code training for tabular models"
 readme = "README.md"
 requires-python = ">=3.10"
