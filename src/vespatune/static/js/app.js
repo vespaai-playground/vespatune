@@ -17,8 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const newTrainingBtn = document.getElementById('new-training-btn');
     const form = document.getElementById('train-form');
     const trialList = document.getElementById('trial-list');
-    const statusChip = document.getElementById('training-status');
     const connectionStatus = document.getElementById('connection-status');
+    const refreshMonitorBtn = document.getElementById('refresh-monitor-btn');
     const trialCount = document.getElementById('trial-count');
     const bestScore = document.getElementById('best-score');
     const latestScore = document.getElementById('latest-score');
@@ -53,6 +53,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalMetrics = document.getElementById('modal-metrics');
     const modalParams = document.getElementById('modal-params');
     const closeTrialModalBtn = document.getElementById('close-trial-modal');
+
+    // Artifacts Modal
+    const artifactsModal = document.getElementById('artifacts-modal');
+    const artifactsList = document.getElementById('artifacts-list');
+    const closeArtifactsModalBtn = document.getElementById('close-artifacts-modal');
+    const artifactsBtn = document.getElementById('artifacts-btn');
+
+    // Initial state
+    refreshMonitorBtn.disabled = false;
+    artifactsBtn.disabled = true;
 
     // --- Utility Functions ---
     function generateProjectName() {
@@ -91,6 +101,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     newTrainingBtn.addEventListener('click', openNewProjectModal);
     closeNewProjectBtn.addEventListener('click', closeNewProjectModal);
+
+    // Refresh button (in monitor header)
+    refreshMonitorBtn.addEventListener('click', async () => {
+        refreshMonitorBtn.style.opacity = '0.5';
+        refreshMonitorBtn.disabled = true;
+        await fetchRuns();
+        if (selectedRunId) {
+            await loadRunDetails(selectedRunId);
+        }
+        refreshMonitorBtn.style.opacity = '1';
+        refreshMonitorBtn.disabled = false;
+    });
 
     // Close modal on backdrop click
     newProjectModal.addEventListener('click', (e) => {
@@ -373,14 +395,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await resp.json();
 
             if (!resp.ok) {
-                setStatus('Error', 'error');
                 setSummaryStatus('Error', 'error');
             } else {
                 isTraining = true;
 
                 // Reset monitor state for new training
                 resetMonitorState();
-                setStatus('Starting...', 'running');
+                artifactsBtn.disabled = false;
                 setSummaryStatus('Running', 'running');
 
                 // Fetch runs to get the new run
@@ -411,7 +432,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (e) {
-            setStatus('Error', 'error');
             console.error(e);
         }
     }
@@ -419,14 +439,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleMessage(data) {
         switch (data.type) {
             case 'status':
-                setStatus(data.message, 'running');
                 setSummaryStatus(data.message, 'running');
                 break;
             case 'trial_complete':
                 addTrial(data);
                 break;
             case 'training_finished':
-                setStatus('Completed', 'completed');
                 setSummaryStatus('Completed', 'completed');
                 isTraining = false;
                 fetchRuns(); // Refresh to update status
@@ -434,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'info':
                 break;
             case 'error':
-                setStatus('Error', 'error');
                 setSummaryStatus('Error', 'error');
                 isTraining = false;
                 break;
@@ -485,8 +502,9 @@ document.addEventListener('DOMContentLoaded', () => {
         bestScore.textContent = '--';
         latestScore.textContent = '--';
         historyCount.textContent = '0';
+        // Only disable artifacts buttons, keep refresh enabled to allow reloading runs
         bestParams.textContent = 'No results yet';
-        setStatus('Ready', '');
+        artifactsBtn.disabled = true;
     }
 
     metricSelect.addEventListener('change', () => {
@@ -609,11 +627,67 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === trialModal) trialModal.style.display = 'none';
     });
 
-    function setStatus(message, type) {
-        statusChip.textContent = message;
-        statusChip.className = 'status-chip';
-        if (type) statusChip.classList.add(type);
+    // --- Artifacts Modal ---
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+
+    async function openArtifactsModal() {
+        if (!selectedRunId) return;
+
+        artifactsList.innerHTML = '<div class="artifacts-empty">Loading...</div>';
+        artifactsModal.style.display = 'flex';
+
+        try {
+            const response = await fetch(`/runs/${selectedRunId}/artifacts`);
+            const data = await response.json();
+
+            if (data.artifacts && data.artifacts.length > 0) {
+                artifactsList.innerHTML = data.artifacts.map(artifact => `
+                    <div class="artifact-item">
+                        <div class="artifact-info">
+                            <span class="artifact-name">${artifact.label}</span>
+                            <span class="artifact-meta">
+                                <span class="artifact-category">${artifact.category}</span>
+                                ${formatFileSize(artifact.size)}
+                            </span>
+                        </div>
+                        <button class="artifact-download" onclick="downloadArtifact(${selectedRunId}, '${artifact.path}', '${artifact.name}')">
+                            Download
+                        </button>
+                    </div>
+                `).join('');
+            } else {
+                artifactsList.innerHTML = '<div class="artifacts-empty">No artifacts available yet</div>';
+            }
+        } catch (error) {
+            artifactsList.innerHTML = '<div class="artifacts-empty">Failed to load artifacts</div>';
+        }
+    }
+
+    // Global function for download button onclick
+    window.downloadArtifact = function(runId, path, name) {
+        const url = `/runs/${runId}/artifacts/download?path=${encodeURIComponent(path)}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    artifactsBtn.addEventListener('click', openArtifactsModal);
+
+    closeArtifactsModalBtn.addEventListener('click', () => {
+        artifactsModal.style.display = 'none';
+    });
+
+    artifactsModal.addEventListener('click', (e) => {
+        if (e.target === artifactsModal) artifactsModal.style.display = 'none';
+    });
+
 
     function clearTrialList() {
         trialList.innerHTML = '<div class="trial-empty">Trials will appear here</div>';
@@ -673,20 +747,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const isThisActive = (run.status === 'running' || run.status === 'pending');
 
+            // Always enable buttons when a run is selected
+            artifactsBtn.disabled = false;
+
             if (isThisActive) {
                 activeRunId = run.id;
                 stopBtn.style.display = 'inline-block';
                 stopBtn.disabled = false;
                 stopBtn.textContent = 'Stop';
                 deleteBtn.style.display = 'none';
-                setStatus('Running...', 'running');
                 setSummaryStatus('Running', 'running');
                 await connectWebSocket();
             } else {
                 stopBtn.style.display = 'none';
                 deleteBtn.style.display = 'inline-block';
                 const statusText = run.status.charAt(0).toUpperCase() + run.status.slice(1);
-                setStatus(statusText, run.status);
                 setSummaryStatus(statusText, run.status);
                 if (ws && ws.readyState === WebSocket.OPEN && selectedRunId !== activeRunId) {
                     ws.close();
@@ -699,6 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAndDisplayRunTrials(runId) {
         resetMonitorState();
+        artifactsBtn.disabled = false;
         try {
             const resp = await fetch(`/runs/${runId}/trials`);
             const data = await resp.json();

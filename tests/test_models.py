@@ -251,6 +251,49 @@ class TestCatBoostModel:
         assert predictions.shape == (20,)
 
 
+class TestToOnnx:
+    """Test ONNX export for each model type."""
+
+    @pytest.fixture
+    def sample_data(self):
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5)
+        y_train = np.random.randint(0, 2, 100)
+        X_valid = np.random.randn(20, 5)
+        y_valid = np.random.randint(0, 2, 20)
+        return X_train, y_train, X_valid, y_valid
+
+    def test_xgboost_to_onnx(self, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        model = XGBoostModel(problem_type="binary_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1, "booster": "gbtree"}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+
+        onnx_model = model.to_onnx(n_features=5)
+        assert onnx_model is not None
+        assert hasattr(onnx_model, "graph")
+
+    def test_lightgbm_to_onnx(self, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        model = LightGBMModel(problem_type="binary_classification", random_state=42)
+        params = {"n_estimators": 10, "max_depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+
+        onnx_model = model.to_onnx(n_features=5)
+        assert onnx_model is not None
+        assert hasattr(onnx_model, "graph")
+
+    def test_catboost_to_onnx(self, sample_data):
+        X_train, y_train, X_valid, y_valid = sample_data
+        model = CatBoostModel(problem_type="binary_classification", random_state=42)
+        params = {"iterations": 10, "depth": 3, "learning_rate": 0.1}
+        model.fit(X_train, y_train, X_valid, y_valid, params)
+
+        onnx_model = model.to_onnx(n_features=5)
+        assert onnx_model is not None
+        assert hasattr(onnx_model, "graph")
+
+
 class TestGetParams:
     def test_xgboost_get_params(self):
         model = XGBoostModel(problem_type="binary_classification", random_state=42)

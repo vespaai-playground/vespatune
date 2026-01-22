@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
@@ -69,7 +69,21 @@
         <main class="main">
             <!-- Top Bar: Status + Metrics -->
             <div class="monitor-header">
-                <div class="status-chip" id="training-status">Ready</div>
+                <div class="header-actions">
+                    <button id="refresh-monitor-btn" class="icon-btn" title="Refresh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </button>
+                    <button id="artifacts-btn" class="icon-btn" title="View Artifacts">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </button>
+                </div>
                 <div class="metrics-bar">
                     <div class="metric">
                         <span class="metric-val" id="trial-count">0</span>
@@ -218,6 +232,21 @@
                 <div class="modal-section">
                     <label>Parameters</label>
                     <pre id="modal-params">--</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Artifacts Modal -->
+    <div id="artifacts-modal" class="modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span>Artifacts</span>
+                <button class="close-modal" id="close-artifacts-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="artifacts-list" class="artifacts-list">
+                    <div class="artifacts-empty">No artifacts available</div>
                 </div>
             </div>
         </div>

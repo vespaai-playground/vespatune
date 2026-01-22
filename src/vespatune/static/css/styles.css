@@ -306,8 +306,13 @@ html, body {
 .monitor-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-lg);
+    justify-content: space-between;
+}
+
+.header-actions {
+    display: flex;
+    gap: var(--space-sm);
 }
 
 .status-chip {
@@ -840,6 +845,103 @@ select option:checked {
 .btn-ghost:hover {
     border-color: var(--hovered-border);
     color: var(--high-contrast-text);
+}
+
+/* Icon Button */
+.icon-btn {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ui-element-background);
+    border: 1px solid var(--subtle-border);
+    border-radius: var(--radius-sm);
+    color: var(--low-contrast-text);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.icon-btn:hover {
+    background: var(--hovered-ui-element-background);
+    border-color: var(--hovered-border);
+    color: var(--high-contrast-text);
+}
+
+.icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: transparent;
+    border-color: transparent;
+    pointer-events: none;
+}
+
+/* Artifacts List */
+.artifacts-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.artifacts-empty {
+    color: var(--low-contrast-text);
+    font-size: var(--font-sm);
+    text-align: center;
+    padding: var(--space-lg);
+}
+
+.artifact-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--subtle-background);
+    border: 1px solid var(--subtle-border);
+    border-radius: var(--radius-sm);
+}
+
+.artifact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.artifact-name {
+    font-size: var(--font-sm);
+    font-weight: var(--font-medium);
+    color: var(--high-contrast-text);
+}
+
+.artifact-meta {
+    font-size: var(--font-xs);
+    color: var(--low-contrast-text);
+}
+
+.artifact-download {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--heather);
+    border: none;
+    border-radius: var(--radius-xs);
+    color: var(--skjaer);
+    font-size: var(--font-xs);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.artifact-download:hover {
+    background: var(--heather-light);
+}
+
+.artifact-category {
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    color: var(--low-contrast-text);
+    padding: 2px var(--space-xs);
+    background: var(--ui-element-background);
+    border-radius: var(--radius-xs);
+    margin-right: var(--space-sm);
 }
 
 /* Scrollbar */

@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
 from sklearn.utils.multiclass import type_of_target
 
 from .enums import ProblemType
+from .export import export_model
 from .logger import logger
 from .models import list_models
 from .schemas import ModelConfig
@@ -220,3 +221,11 @@ class VespaTune:
     def train_final(self, best_params):
         logger.info("Training final model on all data")
         train_final_model(self.model_config, best_params)
+
+        # Export to ONNX
+        logger.info("Exporting model to ONNX format")
+        try:
+            export_model(self.output)
+            logger.info("ONNX export complete")
+        except Exception as e:
+            logger.warning(f"ONNX export failed: {e}")

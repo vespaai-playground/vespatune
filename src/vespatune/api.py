@@ -25,7 +25,7 @@ from fastapi import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 
 from .predict import VespaTuneONNXPredict
@@ -459,6 +459,80 @@ def get_run_trials(run_id: int):
     except Exception as e:
         print(f"Error loading study for run {run_id}: {e}")
         return {"trials": []}
+
+
+@app.get("/runs/{run_id}/artifacts")
+def get_run_artifacts(run_id: int):
+    """List all artifacts for a run."""
+    run = get_run(run_id)
+    if not run or not run["output_dir"]:
+        return {"artifacts": []}
+
+    output_dir = run["output_dir"]
+    if not os.path.exists(output_dir):
+        return {"artifacts": []}
+
+    artifacts = []
+
+    # Main artifacts
+    artifact_files = [
+        ("vtune_model.final", "Final Model", "model"),
+        ("vtune.config", "Config", "config"),
+        ("vtune.best_params", "Best Parameters", "params"),
+        ("vtune.categorical_encoder", "Categorical Encoder", "encoder"),
+        ("vtune.target_encoder", "Target Encoder", "encoder"),
+    ]
+
+    for filename, label, category in artifact_files:
+        filepath = os.path.join(output_dir, filename)
+        if os.path.exists(filepath):
+            size = os.path.getsize(filepath)
+            artifacts.append({
+                "name": filename,
+                "label": label,
+                "category": category,
+                "size": size,
+                "path": filepath,
+            })
+
+    # ONNX artifacts
+    onnx_dir = os.path.join(output_dir, "onnx")
+    if os.path.exists(onnx_dir):
+        for filename in os.listdir(onnx_dir):
+            filepath = os.path.join(onnx_dir, filename)
+            if os.path.isfile(filepath):
+                size = os.path.getsize(filepath)
+                label = "ONNX Model" if filename.endswith(".onnx") else filename
+                artifacts.append({
+                    "name": f"onnx/{filename}",
+                    "label": label,
+                    "category": "onnx",
+                    "size": size,
+                    "path": filepath,
+                })
+
+    return {"artifacts": artifacts}
+
+
+@app.get("/runs/{run_id}/artifacts/download")
+def download_artifact(run_id: int, path: str):
+    """Download a specific artifact."""
+    run = get_run(run_id)
+    if not run or not run["output_dir"]:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # Security: ensure path is within output_dir
+    output_dir = os.path.realpath(run["output_dir"])
+    filepath = os.path.realpath(path)
+
+    if not filepath.startswith(output_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    filename = os.path.basename(filepath)
+    return FileResponse(filepath, filename=filename)
 
 
 @app.get("/active_run_id")
