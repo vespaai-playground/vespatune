@@ -11,7 +11,6 @@ from onnxmltools.convert.common.data_types import FloatTensorType
 from ..preprocessor import BasePreprocessor
 from .base import BaseModel
 
-
 xgb.set_config(verbosity=0)
 
 

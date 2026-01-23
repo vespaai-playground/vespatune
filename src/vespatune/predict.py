@@ -14,7 +14,6 @@ from .logger import logger
 from .preprocessor import BasePreprocessor
 from .utils import reduce_memory_usage, use_predict_proba
 
-
 xgb.set_config(verbosity=0)
 
 

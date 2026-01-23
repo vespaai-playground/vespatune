@@ -3,37 +3,37 @@ name = "vespatune"
 version = "0.0.3"
 description = "vespatune: no-code training for tabular models"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "Apache 2.0"}
 authors = [
     {name = "Abhishek Thakur"}
 ]
 dependencies = [
-    "fastapi>=0.115.0",
-    "jinja2>=3.1.0",
-    "rich>=13.0.0",
-    "numpy>=2.2.0",
-    "optuna>=4.1.0",
-    "pyarrow>=18.1.0",
-    "pydantic>=2.10.0",
-    "joblib>=1.4.2",
-    "pandas>=2.2.0",
-    "scikit-learn>=1.6.0",
-    "uvicorn>=0.34.0",
-    "xgboost>=2.1.0",
-    "lightgbm>=4.5.0",
-    "catboost>=1.2.0",
-    "onnx>=1.17.0",
-    "onnxmltools>=1.12.0",
+    "fastapi>=0.128.0",
+    "jinja2>=3.1.6",
+    "rich>=14.2.0",
+    "numpy>=2.4.1",
+    "optuna>=4.7.0",
+    "pyarrow>=23.0.0",
+    "pydantic>=2.12.5",
+    "joblib>=1.5.3",
+    "pandas>=3.0.0",
+    "scikit-learn>=1.8.0",
+    "uvicorn>=0.40.0",
+    "xgboost>=3.1.3",
+    "lightgbm>=4.6.0",
+    "catboost>=1.2.8",
+    "onnx>=1.20.1",
+    "onnxmltools>=1.15.0",
     "onnxruntime>=1.23.2",
     "python-multipart>=0.0.21",
     "websockets>=16.0",
 ]
 
 [project.optional-dependencies]
-onnxruntime = ["onnxruntime>=1.20.0"]
+onnxruntime = ["onnxruntime>=1.23.2"]
 dev = [
-    "black==25.12.0",
+    "black==26.1.0",
     "isort==7.0.0",
     "flake8==7.3.0",
     "pytest>=9.0.2",
@@ -47,7 +47,7 @@ Homepage = "https://github.com/vespaai-playground/vespatune"
 vespatune = "vespatune.cli.vespatune:main"
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=80.10.1"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -58,7 +58,7 @@ vespatune = ["static/**/*", "templates/**/*"]
 
 [tool.black]
 line-length = 119
-target-version = ["py310"]
+target-version = ["py311"]
 exclude = '''
 /(
     \.git
@@ -72,13 +72,8 @@ exclude = '''
 '''
 
 [tool.isort]
-ensure_newline_before_comments = true
-force_grid_wrap = 0
-include_trailing_comma = true
+profile = "black"
 line_length = 119
-lines_after_imports = 2
-multi_line_output = 3
-use_parentheses = true
 
 [tool.flake8]
 ignore = ["E203", "E501", "W503"]

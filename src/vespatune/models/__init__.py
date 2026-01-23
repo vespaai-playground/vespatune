@@ -16,7 +16,6 @@ from .lightgbm_model import LightGBMModel, LightGBMPreprocessor
 from .logreg_model import LogRegModel, LogRegPreprocessor
 from .xgboost_model import XGBoostModel, XGBoostPreprocessor
 
-
 # Registry of available models
 MODEL_REGISTRY: Dict[str, Type[BaseModel]] = {
     "xgboost": XGBoostModel,

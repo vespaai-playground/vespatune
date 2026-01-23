@@ -2,13 +2,13 @@
 .PHONY: quality style test
 
 quality:
-	black --check .
 	isort --check-only .
+	black --check .
 	flake8 --max-line-length 119 --ignore=E203,W503 --exclude=.venv,venv,.env,env,build,dist .
 
 style:
-	black .
 	isort .
+	black .
 
 test:
 	pytest -sv ./src/

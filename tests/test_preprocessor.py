@@ -499,7 +499,10 @@ class TestPreprocessorImputation:
         return df
 
     def test_numeric_imputation_median(self, data_with_missing):
-        preprocessor = XGBoostPreprocessor(numeric_impute_strategy="median")
+        preprocessor = XGBoostPreprocessor(
+            numeric_impute_strategy="median",
+            categorical_impute_strategy="most_frequent",  # Also impute categorical NaN
+        )
         preprocessor.fit(
             data_with_missing,
             problem_type=ProblemType.binary_classification,
@@ -513,7 +516,10 @@ class TestPreprocessorImputation:
         assert not np.any(np.isnan(result))
 
     def test_numeric_imputation_mean(self, data_with_missing):
-        preprocessor = XGBoostPreprocessor(numeric_impute_strategy="mean")
+        preprocessor = XGBoostPreprocessor(
+            numeric_impute_strategy="mean",
+            categorical_impute_strategy="most_frequent",  # Also impute categorical NaN
+        )
         preprocessor.fit(
             data_with_missing,
             problem_type=ProblemType.binary_classification,

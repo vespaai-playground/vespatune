@@ -157,8 +157,9 @@ class VespaTune:
 
             # Transform targets for classification
             if preprocessor.target_encoder_ is not None:
-                train_df.loc[:, self.targets] = preprocessor.transform_target(train_df[self.targets].values.ravel())
-                valid_df.loc[:, self.targets] = preprocessor.transform_target(valid_df[self.targets].values.ravel())
+                for target_col in self.targets:
+                    train_df[target_col] = preprocessor.transform_target(train_df[target_col].values)
+                    valid_df[target_col] = preprocessor.transform_target(valid_df[target_col].values)
 
             # Save target encoder separately for later use
             joblib.dump(preprocessor.target_encoder_, f"{self.output}/vtune.target_encoder")
@@ -190,8 +191,9 @@ class VespaTune:
 
             # Transform targets for classification
             if preprocessor.target_encoder_ is not None:
-                train_df.loc[:, self.targets] = preprocessor.transform_target(train_df[self.targets].values.ravel())
-                valid_df.loc[:, self.targets] = preprocessor.transform_target(valid_df[self.targets].values.ravel())
+                for target_col in self.targets:
+                    train_df[target_col] = preprocessor.transform_target(train_df[target_col].values)
+                    valid_df[target_col] = preprocessor.transform_target(valid_df[target_col].values)
 
             # Update features to use the transformed order
             self.features = feature_names_out

@@ -14,7 +14,6 @@ from .logger import logger
 from .metrics import Metrics
 from .models import PREPROCESSOR_REGISTRY, get_model
 
-
 optuna.logging.set_verbosity(optuna.logging.INFO)
 
 

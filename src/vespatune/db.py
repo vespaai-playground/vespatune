@@ -3,7 +3,6 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-
 DB_DIR = os.path.expanduser("~/.vespatune")
 os.makedirs(DB_DIR, exist_ok=True)
 DB_PATH = os.path.join(DB_DIR, "vespatune.db")
@@ -21,8 +20,7 @@ def get_db():
 
 def init_db():
     with get_db() as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 status TEXT NOT NULL,
@@ -34,8 +32,7 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 error_message TEXT
             )
-        """
-        )
+        """)
 
         # Add project_name column if it doesn't exist (for existing databases)
         try:

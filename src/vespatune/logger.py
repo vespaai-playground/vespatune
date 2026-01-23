@@ -11,7 +11,6 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.theme import Theme
 
-
 # Custom theme for VespaTune
 VESPATUNE_THEME = Theme(
     {

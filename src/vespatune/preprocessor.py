@@ -99,7 +99,9 @@ class BasePreprocessor:
         if self.categorical_features is not None:
             self.categorical_features_ = [c for c in self.categorical_features if c in self.features_]
         else:
-            self.categorical_features_ = [c for c in self.features_ if X[c].dtype == "object"]
+            self.categorical_features_ = [
+                c for c in self.features_ if pd.api.types.is_string_dtype(X[c]) or X[c].dtype == "object"
+            ]
 
         # Determine numeric features
         self.numeric_features_ = [c for c in self.features_ if c not in self.categorical_features_]

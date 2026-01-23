@@ -9,7 +9,6 @@ from .predict import VespaTuneONNXPredict, VespaTunePredict, VespaTuneProcessor 
 from .preprocessor import BasePreprocessor  # noqa: F401
 from .splitter import VespaTuneSplitter, split_data  # noqa: F401
 
-
 __all__ = [
     "VespaTune",
     "VespaTuneExport",
