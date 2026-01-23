@@ -1,6 +1,9 @@
 # VespaTune
 
-Gradient Boosting + Optuna: no brainer
+No code tool for training tabular models.
+
+[![Duplicate Space](https://img.shields.io)](https://huggingface.co/spaces/vespa-engine/vespatune?duplicate=true)
+
 
 - **Web UI** for training, monitoring, and managing models
 - Tune models directly from CSV files
