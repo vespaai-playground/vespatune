@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let runs = [];
     let activeRunId = null;
     let selectedRunId = null;
+    let wsReconnectAttempts = 0;
+    let wsReconnectTimeout = null;
+    let pollInterval = null;
 
     // --- DOM Elements ---
     const runListContainer = document.getElementById('run-list');
@@ -336,12 +339,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // Clear any pending reconnect
+            if (wsReconnectTimeout) {
+                clearTimeout(wsReconnectTimeout);
+                wsReconnectTimeout = null;
+            }
+
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
             ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
             ws.onopen = () => {
                 connectionStatus.classList.add('connected');
                 connectionStatus.title = 'Connected';
+                wsReconnectAttempts = 0;
                 resolve();
             };
 
@@ -353,6 +363,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ws.onclose = () => {
                 connectionStatus.classList.remove('connected');
                 connectionStatus.title = 'Disconnected';
+                // Auto-reconnect with exponential backoff if there's an active run
+                if (activeRunId && selectedRunId === activeRunId) {
+                    scheduleReconnect();
+                }
             };
 
             ws.onerror = (e) => {
@@ -360,6 +374,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 resolve(); // Resolve anyway to not block
             };
         });
+    }
+
+    function scheduleReconnect() {
+        if (wsReconnectTimeout) return;
+
+        wsReconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts - 1), 30000);
+
+        wsReconnectTimeout = setTimeout(async () => {
+            wsReconnectTimeout = null;
+            if (activeRunId && selectedRunId === activeRunId) {
+                await connectWebSocket();
+            }
+        }, delay);
     }
 
     async function startTraining(selectedTargets) {
@@ -401,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Reset monitor state for new training
                 resetMonitorState();
+                chartPlaceholder.textContent = 'Training started. Waiting for results...';
                 artifactsBtn.disabled = false;
                 setSummaryStatus('Running', 'running');
 
@@ -496,6 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         chartPlaceholder.style.display = 'flex';
+        chartPlaceholder.textContent = 'Start training to see progress';
         document.getElementById('optimization-chart').style.display = 'none';
 
         trialCount.textContent = '0';
@@ -763,17 +793,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 deleteBtn.style.display = 'inline-block';
                 const statusText = run.status.charAt(0).toUpperCase() + run.status.slice(1);
                 setSummaryStatus(statusText, run.status);
-                if (ws && ws.readyState === WebSocket.OPEN && selectedRunId !== activeRunId) {
-                    ws.close();
-                }
             }
 
             await fetchAndDisplayRunTrials(runId);
         } catch (e) { console.error(e); }
     }
 
-    async function fetchAndDisplayRunTrials(runId) {
-        resetMonitorState();
+    async function fetchAndDisplayRunTrials(runId, incremental = false) {
+        if (!incremental) {
+            resetMonitorState();
+        }
         artifactsBtn.disabled = false;
         try {
             const resp = await fetch(`/runs/${runId}/trials`);
@@ -838,7 +867,106 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Polling for Live Updates ---
+    async function pollForUpdates() {
+        try {
+            // Check for new runs
+            const prevCount = runs.length;
+
+            // Always refresh runs list to catch new runs and status changes
+            await fetchRuns();
+
+            // Auto-select new run if one was just created
+            if (runs.length > prevCount && runs.length > 0) {
+                const newestRun = runs[0];
+                if (newestRun.status === 'running' || newestRun.status === 'pending') {
+                    await selectRun(newestRun.id);
+                }
+            }
+
+            if (!selectedRunId) return;
+
+            // Fetch current run status
+            const runResp = await fetch(`/runs/${selectedRunId}`);
+            if (!runResp.ok) return;
+            const run = await runResp.json();
+
+            // Update status
+            const statusText = run.status.charAt(0).toUpperCase() + run.status.slice(1);
+            setSummaryStatus(statusText, run.status);
+
+            // Update active run tracking
+            if (run.status === 'running') {
+                activeRunId = run.id;
+                isTraining = true;
+                stopBtn.style.display = 'inline-block';
+                stopBtn.disabled = false;
+                deleteBtn.style.display = 'none';
+            } else {
+                if (activeRunId === run.id) {
+                    activeRunId = null;
+                    isTraining = false;
+                }
+                stopBtn.style.display = 'none';
+                deleteBtn.style.display = 'inline-block';
+            }
+
+            // Fetch and update trials
+            const trialsResp = await fetch(`/runs/${selectedRunId}/trials`);
+            if (!trialsResp.ok) return;
+            const data = await trialsResp.json();
+
+            if (data.trials && data.trials.length > 0) {
+                // Add new trials only (addTrial checks for duplicates)
+                data.trials.forEach(t => {
+                    if (t.user_attrs) {
+                        Object.keys(t.user_attrs).forEach(k => {
+                            if (!k.startsWith('mlflow')) availableMetrics.add(k);
+                        });
+                    }
+                });
+                updateMetricDropdown();
+
+                data.trials.forEach(t => {
+                    const trialObj = {
+                        number: t.number,
+                        value: t.value,
+                        params: t.params,
+                        metrics: t.user_attrs || {},
+                        best_params: null
+                    };
+                    addTrial(trialObj);
+                });
+            }
+
+            // Always update best values
+            if (data.best_value !== undefined && data.best_value !== null) {
+                bestValue = data.best_value;
+                bestScore.textContent = bestValue.toFixed(6);
+            }
+            if (data.best_params) {
+                bestParams.textContent = JSON.stringify(data.best_params, null, 2);
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+        }
+    }
+
+    function startPolling() {
+        if (pollInterval) return;
+        // Poll every 2 seconds for responsive updates
+        pollInterval = setInterval(pollForUpdates, 2000);
+    }
+
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
     // Initialize
     initChart();
     checkCurrentStudy();
+    startPolling();
 });

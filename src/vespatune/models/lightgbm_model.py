@@ -40,12 +40,12 @@ class LightGBMModel(BaseModel):
     def get_params(self, trial, model_config) -> Dict[str, Any]:
         """Get LightGBM hyperparameters for Optuna trial."""
         # Boosting type must be selected first as it affects other params
-        boosting_type = trial.suggest_categorical("boosting_type", ["gbdt", "dart", "goss"])
+        boosting_type = trial.suggest_categorical("boosting_type", ["gbdt", "goss"])
 
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
-            "n_estimators": trial.suggest_int("n_estimators", 500, 10000),
-            "num_leaves": trial.suggest_int("num_leaves", 20, 300),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 10000),
+            "num_leaves": trial.suggest_int("num_leaves", 20, 150),
             "max_depth": trial.suggest_int("max_depth", 3, 15),
             "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
             "min_child_weight": trial.suggest_float("min_child_weight", 1e-3, 10.0, log=True),
@@ -57,9 +57,7 @@ class LightGBMModel(BaseModel):
             "boosting_type": boosting_type,
         }
 
-        # Early stopping not available in dart mode
-        if boosting_type != "dart":
-            params["early_stopping_rounds"] = trial.suggest_int("early_stopping_rounds", 50, 300)
+        params["early_stopping_rounds"] = trial.suggest_int("early_stopping_rounds", 50, 300)
 
         # GOSS-specific parameters (GOSS cannot use bagging/subsample)
         if boosting_type == "goss":
@@ -69,12 +67,6 @@ class LightGBMModel(BaseModel):
             # Bagging parameters only for gbdt and dart
             params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
             params["subsample_freq"] = trial.suggest_int("subsample_freq", 1, 10)
-
-        # DART-specific parameters
-        if boosting_type == "dart":
-            params["drop_rate"] = trial.suggest_float("drop_rate", 0.0, 0.3)
-            params["skip_drop"] = trial.suggest_float("skip_drop", 0.0, 0.5)
-            params["max_drop"] = trial.suggest_int("max_drop", 10, 100)
 
         # GPU settings
         if model_config.use_gpu:

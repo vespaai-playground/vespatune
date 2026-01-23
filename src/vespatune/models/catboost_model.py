@@ -45,7 +45,7 @@ class CatBoostModel(BaseModel):
 
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
-            "iterations": trial.suggest_int("iterations", 500, 10000),
+            "iterations": trial.suggest_int("iterations", 50, 10000),
             "early_stopping_rounds": trial.suggest_int("early_stopping_rounds", 50, 300),
             "depth": trial.suggest_int("depth", 4, 10),
             "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-8, 10.0, log=True),

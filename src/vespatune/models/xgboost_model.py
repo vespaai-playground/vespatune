@@ -46,7 +46,7 @@ class XGBoostModel(BaseModel):
         # Base parameters
         params = {
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
-            "n_estimators": trial.suggest_int("n_estimators", 500, 10000),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 10000),
             "early_stopping_rounds": trial.suggest_int("early_stopping_rounds", 50, 300),
             "max_depth": trial.suggest_int("max_depth", 3, 12),
             "min_child_weight": trial.suggest_float("min_child_weight", 1e-3, 10.0, log=True),
@@ -67,9 +67,8 @@ class XGBoostModel(BaseModel):
         else:
             params["tree_method"] = trial.suggest_categorical("tree_method", ["hist", "approx"])
 
-        # Booster selection (excluding gblinear for ONNX compatibility)
-        booster = trial.suggest_categorical("booster", ["gbtree", "dart"])
-        params["booster"] = booster
+        # Booster selection (excluding gblinear for ONNX compatibility, dart for speed)
+        params["booster"] = "gbtree"
 
         # Tree-specific parameters
         grow_policy = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
@@ -80,13 +79,6 @@ class XGBoostModel(BaseModel):
 
         if params["tree_method"] == "hist":
             params["max_bin"] = trial.suggest_int("max_bin", 128, 512)
-
-        # Dart-specific parameters
-        if booster == "dart":
-            params["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
-            params["normalize_type"] = trial.suggest_categorical("normalize_type", ["tree", "forest"])
-            params["rate_drop"] = trial.suggest_float("rate_drop", 0.0, 0.3)
-            params["skip_drop"] = trial.suggest_float("skip_drop", 0.0, 0.5)
 
         # Task-specific parameters
         params = self._add_task_specific_params(trial, params)
