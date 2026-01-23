@@ -2,8 +2,7 @@
 
 No code tool for training tabular models.
 
-[![Duplicate Space](https://img.shields.io)](https://huggingface.co/spaces/vespa-engine/vespatune?duplicate=true)
-
+<div align="center">[![Deploy on Hugging Face Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/deploy-on-spaces-md.svg)](https://huggingface.co/spaces/vespa-engine/vespatune?duplicate=true)</div>
 
 - **Web UI** for training, monitoring, and managing models
 - Tune models directly from CSV files
