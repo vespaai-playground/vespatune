@@ -12,6 +12,7 @@ from .export import export_model
 from .logger import logger
 from .models import MODEL_REGISTRY, get_preprocessor, list_models
 from .schemas import ModelConfig
+from .splitter import split_data
 from .utils import is_cuda_available, reduce_memory_usage, train_final_model, train_model
 
 
@@ -19,10 +20,10 @@ from .utils import is_cuda_available, reduce_memory_usage, train_final_model, tr
 class VespaTune:
     # required arguments
     train_filename: str
-    valid_filename: str
     output: str
 
     # optional arguments
+    valid_filename: Optional[str] = None
     test_filename: Optional[str] = None
     task: Optional[str] = None
     idx: Optional[str] = "id"
@@ -104,6 +105,26 @@ class VespaTune:
         return df
 
     def _process_data(self):
+        # If no validation file provided, use splitter to create train/valid split
+        if self.valid_filename is None:
+            logger.info("No validation file provided. Using splitter to create 5-fold split...")
+            split_output_dir = os.path.join(self.output, "_splits")
+            fold_files = split_data(
+                input_filename=self.train_filename,
+                output_dir=split_output_dir,
+                num_folds=5,
+                targets=self.targets,
+                task=self.task,
+                seed=self.seed,
+            )
+            # Use fold 0 for training
+            self.train_filename = fold_files[0]["train_path"]
+            self.valid_filename = fold_files[0]["valid_path"]
+            logger.info(
+                f"Using fold 0: train={fold_files[0]['train_size']} samples, "
+                f"valid={fold_files[0]['valid_size']} samples"
+            )
+
         logger.info("Reading training data")
         train_df = pd.read_csv(self.train_filename)
         train_df = reduce_memory_usage(train_df)

@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('train_filename').value = '';
         document.getElementById('valid_filename').value = '';
         document.getElementById('train_file_info').textContent = 'Train CSV';
-        document.getElementById('valid_file_info').textContent = 'Valid CSV';
+        document.getElementById('valid_file_info').textContent = 'Valid CSV (optional)';
         document.getElementById('train-upload').classList.remove('uploaded');
         document.getElementById('valid-upload').classList.remove('uploaded');
         targetSelect.innerHTML = '<option value="" disabled>Upload CSV first</option>';
@@ -397,6 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [key, value] of formData.entries()) {
             if (key === 'target_columns') continue;
             if (key === 'id_column') continue; // Handle separately
+            if (key === 'valid_filename') continue; // Handle separately
             const input = document.getElementById(key);
             if (input && input.type === 'number') {
                 data[key] = parseFloat(value);
@@ -404,6 +405,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 data[key] = value;
             }
         }
+
+        // Handle optional valid_filename - send null if not provided
+        const validFilename = document.getElementById('valid_filename').value;
+        data.valid_filename = validFilename || null;
 
         data.target_columns = selectedTargets.join(';');
 
@@ -447,7 +452,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     projectSummary.style.display = 'block';
                     summaryProjectName.textContent = data.project_name || 'Project';
                     sumTrainFile.textContent = document.getElementById('train_file_info').textContent;
-                    sumValidFile.textContent = document.getElementById('valid_file_info').textContent;
+                    const validFile = document.getElementById('valid_filename').value;
+                    sumValidFile.textContent = validFile ? document.getElementById('valid_file_info').textContent : 'Auto-split';
                     sumTarget.textContent = data.target_columns.replace(/;/g, ', ');
                     sumModel.textContent = `${data.model_type} (${data.task})`;
                     sumTrials.textContent = data.num_trials;
@@ -493,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
         summaryProjectName.textContent = config.project_name || 'Project';
 
         const trainFile = config.train_filename ? config.train_filename.split('/').pop() : '--';
-        const validFile = config.valid_filename ? config.valid_filename.split('/').pop() : '--';
+        const validFile = config.valid_filename ? config.valid_filename.split('/').pop() : 'Auto-split';
 
         sumTrainFile.textContent = trainFile;
         sumValidFile.textContent = validFile;

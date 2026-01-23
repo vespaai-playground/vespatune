@@ -7,7 +7,7 @@ import signal
 import subprocess
 import sys
 import time
-from typing import List
+from typing import List, Optional
 
 import optuna
 import pandas as pd
@@ -230,7 +230,7 @@ async def monitor_trials(db_path: str, manager: ConnectionManager):
 class TrainRequest(BaseModel):
     project_name: str
     train_filename: str
-    valid_filename: str
+    valid_filename: Optional[str] = None
     target_columns: str
     id_column: str = "id"
     task: str = "classification"

@@ -5,7 +5,11 @@ from .models.catboost_model import CatBoostPreprocessor  # noqa: F401
 from .models.lightgbm_model import LightGBMPreprocessor  # noqa: F401
 from .models.logreg_model import LogRegPreprocessor  # noqa: F401
 from .models.xgboost_model import XGBoostPreprocessor  # noqa: F401
-from .predict import VespaTuneONNXPredict, VespaTunePredict, VespaTuneProcessor  # noqa: F401
+from .predict import (  # noqa: F401
+    VespaTuneONNXPredict,
+    VespaTunePredict,
+    VespaTuneProcessor,
+)
 from .preprocessor import BasePreprocessor  # noqa: F401
 from .splitter import VespaTuneSplitter, split_data  # noqa: F401
 
@@ -26,4 +30,4 @@ __all__ = [
     "split_data",
 ]
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"

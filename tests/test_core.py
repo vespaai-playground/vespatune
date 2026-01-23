@@ -732,3 +732,55 @@ class TestVespaTuneRealDataMultiLabelClassification:
         model = joblib.load(os.path.join(output_dir, "vtune_model.final"))
         assert isinstance(model, list)
         assert len(model) == len(data["targets"])
+
+
+class TestVespaTuneAutoSplit:
+    """Test auto-split when validation file is not provided."""
+
+    def test_auto_split_classification(self, full_data_file):
+        """Test that auto-split works for classification when no valid file provided."""
+        data = full_data_file
+        output_dir = os.path.join(data["temp_dir"], "output")
+
+        vtune = VespaTune(
+            train_filename=data["data_path"],
+            output=output_dir,
+            targets=["target"],
+            task="classification",
+            num_trials=1,
+            time_limit=30,
+        )
+
+        vtune.train()
+
+        # Check that splits were created
+        splits_dir = os.path.join(output_dir, "_splits")
+        assert os.path.exists(splits_dir)
+        assert os.path.exists(os.path.join(splits_dir, "train_fold_0.csv"))
+        assert os.path.exists(os.path.join(splits_dir, "valid_fold_0.csv"))
+
+        # Check that model was trained
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))
+
+    def test_auto_split_regression(self, regression_data_file):
+        """Test that auto-split works for regression when no valid file provided."""
+        data = regression_data_file
+        output_dir = os.path.join(data["temp_dir"], "output")
+
+        vtune = VespaTune(
+            train_filename=data["data_path"],
+            output=output_dir,
+            targets=["target"],
+            task="regression",
+            num_trials=1,
+            time_limit=30,
+        )
+
+        vtune.train()
+
+        # Check that splits were created
+        splits_dir = os.path.join(output_dir, "_splits")
+        assert os.path.exists(splits_dir)
+
+        # Check that model was trained
+        assert os.path.exists(os.path.join(output_dir, "vtune_model.final"))

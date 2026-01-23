@@ -36,9 +36,10 @@ class TrainVespaTuneCommand(BaseCommand):
         )
         _parser.add_argument(
             "--valid_filename",
-            help="Path to validation file",
-            required=True,
+            help="Path to validation file (optional - if not provided, will auto-split training data)",
+            required=False,
             type=str,
+            default=None,
         )
         _parser.add_argument(
             "--test_filename",
