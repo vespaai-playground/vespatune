@@ -1,12 +1,13 @@
 # VespaTune
 
-No code tool for training tabular models.
-
 <p align="center">
   <a href="https://huggingface.co/spaces/vespa-engine/vespatune?duplicate=true">
     <img src="assets/hf-spaces-badge.svg" alt="Deploy on HF Spaces">
   </a>
 </p>
+
+
+No code tool for training tabular models.
 
 - **Web UI** for training, monitoring, and managing models
 - Tune models directly from CSV files
