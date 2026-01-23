@@ -41,12 +41,21 @@ vespatune --host 0.0.0.0 --port 8080
 
 ### CLI
 
-Train a model:
+Train a model with explicit train/valid split:
 
 ```bash
 vespatune train \
   --train_filename train.csv \
   --valid_filename valid.csv \
+  --output outputs/my_model \
+  --model xgboost
+```
+
+Or let VespaTune auto-split your data:
+
+```bash
+vespatune train \
+  --train_filename data.csv \
   --output outputs/my_model \
   --model xgboost
 ```
@@ -71,6 +80,7 @@ vespatune serve --model_path outputs/my_model --host 0.0.0.0 --port 8000
 ```python
 from vespatune import VespaTune
 
+# With explicit validation file
 vtune = VespaTune(
     train_filename="train.csv",
     valid_filename="valid.csv",
@@ -81,13 +91,24 @@ vtune = VespaTune(
     time_limit=3600,
 )
 vtune.train()
+
+# Or with auto-split (no validation file needed)
+vtune = VespaTune(
+    train_filename="data.csv",
+    output="outputs/my_model",
+    model_type="xgboost",
+    targets=["target"],
+    num_trials=100,
+)
+vtune.train()
 ```
 
 ## Web UI Features
 
 The web interface provides:
 
-- **File Upload**: Drag and drop CSV files for training and validation
+- **File Upload**: Drag and drop CSV files for training (validation file is optional)
+- **Auto-Split**: If no validation file is provided, automatically splits training data
 - **Auto Column Detection**: Automatically detects columns for target and ID selection
 - **Model Selection**: Choose between XGBoost, LightGBM, or CatBoost
 - **Real-time Monitoring**: Watch training progress with live trial updates via WebSocket
@@ -102,13 +123,13 @@ The web interface provides:
 | Parameter | Description |
 |-----------|-------------|
 | `train_filename` | Path to training CSV file |
-| `valid_filename` | Path to validation CSV file |
 | `output` | Path to output directory for model artifacts |
 
 ### Optional
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `valid_filename` | `None` | Path to validation CSV file (auto-splits training data if not provided) |
 | `model_type` | `"xgboost"` | Model to use: `"xgboost"`, `"lightgbm"`, `"catboost"`, or `"logreg"` |
 | `test_filename` | `None` | Path to test CSV file (predictions saved if provided) |
 | `task` | `None` | `"classification"` or `"regression"` (auto-detected if not specified) |
@@ -145,7 +166,12 @@ The web interface provides:
 
 ## Data Splitting
 
-VespaTune uses an explicit train/validation split. If you have a single dataset, use the splitter utility:
+VespaTune supports two modes:
+
+1. **Explicit split**: Provide both `train_filename` and `valid_filename`
+2. **Auto-split**: Provide only `train_filename` - VespaTune automatically creates a 5-fold split and uses fold 0 (80% train, 20% valid)
+
+For manual control over splits, use the splitter utility:
 
 ```bash
 vespatune splitter \
@@ -252,7 +278,7 @@ vespatune train --help
 
 options:
   --train_filename      Path to training file (required)
-  --valid_filename      Path to validation file (required)
+  --valid_filename      Path to validation file (optional, auto-splits if not provided)
   --output              Path to output directory (required)
   --model               Model type: xgboost, lightgbm, catboost, logreg (default: xgboost)
   --test_filename       Path to test file
@@ -328,6 +354,7 @@ After training, the following files are created in the output directory:
 | `train.feather` | Processed training data |
 | `valid.feather` | Processed validation data |
 | `onnx/` | ONNX export directory (after export) |
+| `_splits/` | Auto-generated train/valid splits (only if no validation file provided) |
 
 ## Example
 
