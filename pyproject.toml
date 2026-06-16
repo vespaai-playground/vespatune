@@ -26,7 +26,8 @@ dependencies = [
     "onnx>=1.21.0",  # CVE-2026-0994
     "onnxmltools>=1.15.0",  # CVE-2026-0994
     "onnxruntime>=1.23.2",  # CVE-2026-0994
-    "python-multipart>=0.0.22",  # CVE-2026-24486
+    "python-multipart>=0.0.30",  # CVE-2026-24486, CVE-2026-53539
+    "starlette>=1.3.1",  # CVE-2026-48818, CVE-2026-54283 (transitive via fastapi)
     "websockets>=16.0",
 ]
 
