@@ -3,7 +3,7 @@ name = "vespatune"
 version = "0.0.5"
 description = "vespatune: no-code training for tabular models"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 license = {text = "Apache 2.0"}
 authors = [
     {name = "Abhishek Thakur"}
